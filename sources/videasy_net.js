@@ -41,7 +41,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://videasy.net/',
       },
-      timeout: 20000,
+      timeout: 10000,
     });
 
     const encryptedText = typeof apiResp.data === 'string' ? apiResp.data.trim() : String(apiResp.data);
@@ -64,7 +64,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
-      timeout: 30000,
+      timeout: 15000,
     });
 
     if (decryptResp.data?.status !== 200 || !decryptResp.data?.result) {

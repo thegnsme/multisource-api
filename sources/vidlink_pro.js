@@ -26,7 +26,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     // Step 1: Encrypt the TMDB ID via enc-dec.app
     const encResp = await axios.get(ENC_API, {
       params: { text: String(tmdbId) },
-      timeout: 10000,
+      timeout: 8000,
     });
 
     if (encResp.data?.status !== 200 || !encResp.data?.result) {
@@ -53,7 +53,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         'Referer': 'https://vidlink.pro/',
         'Accept': 'application/json',
       },
-      timeout: 15000,
+      timeout: 10000,
     });
 
     const streamData = streamResp.data;
@@ -83,7 +83,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://vidlink.pro/',
       },
-      timeout: 10000,
+      timeout: 8000,
       validateStatus: () => true,
     });
 

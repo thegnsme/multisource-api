@@ -27,7 +27,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         'Referer': `https://brightpathsignals.com/embed/${type}/${tmdbId}`,
         'Accept': 'application/json',
       },
-      timeout: 15000,
+      timeout: 10000,
     });
 
     const data = resp.data;
@@ -54,7 +54,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': 'https://brightpathsignals.com/',
           },
-          timeout: 10000,
+          timeout: 8000,
           validateStatus: () => true,
         });
 

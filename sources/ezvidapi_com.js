@@ -25,7 +25,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
         ? API_BASE + '/movie/' + provider + '/' + tmdbId
         : API_BASE + '/tv/' + provider + '/' + tmdbId + '?season=' + (season || 1) + '&episode=' + (episode || 1);
 
-      const resp = await fetchUrl(apiUrl, { referer: API_BASE, timeout: 10000 });
+      const resp = await fetchUrl(apiUrl, { referer: API_BASE, timeout: 8000 });
       if (resp.status !== 200 || !resp.html) continue;
 
       let data;
