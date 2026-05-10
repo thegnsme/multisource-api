@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test API
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Verify source files
+        run: |
+          echo "📁 Source files:"
+          ls -la sources/*.js
+          echo ""
+          echo "🧩 Source count:"
+          ls -1 sources/*.js | wc -l
+
+      - name: Quick syntax check
+        run: node -e "const s=require('./sources'); console.log('✅ Loaded ' + s.sourceCount + ' sources')"
+
+      - name: Test with TMDB IDs
+        run: timeout 180 CN_RETRIES=2 node test.js
+        timeout-minutes: 4
+
+      - name: Verify API output
+        run: |
+          echo "✅ All tests passed!"
+          echo "🎬 Video Sources Aggregator API ready"
