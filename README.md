@@ -8,7 +8,13 @@
 ---
 
 <!-- HEALTH_CHECK_START -->
-📊 **Last Health Check:** 2026-05-10 06:36:06 UTC — ✅ 🟢 8/15 sources working
+> **📊 Source Health Status**
+>
+> ✅ 🟢 **8** / 15 sources working
+>
+> 🕐 **Last checked:** 2026-05-10 06:43:03 UTC
+>
+> [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
 
 ---
@@ -88,25 +94,31 @@ node api.js --tmdb=<TMDB_ID> [--type=movie|tv] [--season=N] [--episode=N]
 | `--season` | `1` | Season number (TV only) |
 | `--episode` | `1` | Episode number (TV only) |
 
-## ✅ Source Status
+## 🗺 Source Map
 
-See the full **[Source Health Report](./SOURCE_HEALTH.md)** — auto-generated every 8 hours with per-source, per-movie results.
+All 15 sources currently implemented, with their working status and capabilities.
 
-| Status | Meaning |
-|--------|---------|
-| 🟢 **Working** | Returns real HLS streams via HTTP API |
-| 🔶 **Embed** | Page loads but streams need browser JavaScript |
-| ❌ **Unavailable** | Dead source — no video content |
+**Legend:** 🟢 Working · 🔶 Embed (needs browser JS) · ❌ Unavailable
 
-### Current Working Sources
+| # | Source | Status | Qualities | Subtitles | How It Works |
+|---|--------|--------|-----------|-----------|--------------|
+| 1 | **vaplayer.ru** | 🟢 | 360p → 1080p | ✗ | JSON API → HLS master playlist |
+| 2 | **ezvidapi.com** | 🟢 | 720p → 1080p | 7-12 langs | Proxied m3u8 → quality variants |
+| 3 | **vidlink.pro** | 🟢 | 360p → 1080p | 4-30 langs | Encrypted API → HLS + captions |
+| 4 | **videasy.net** | 🟢 | 480p → 4K | 67-152 langs | Encrypted API → decrypt → sources |
+| 5 | **vixsrc.to** | 🟢 | varies | ✗ | API → embed page → stream URLs |
+| 6 | cinesrc.st | 🔶 | — | — | Next.js RSC — streams loaded client-side |
+| 7 | cloudnestra.com | 🔶 | — | — | Cloudflare Turnstile blocked from server IP |
+| 8 | vidsrc-embed.su | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
+| 9 | vidsrc.fyi | 🔶 | — | — | Cloudnestra CDN via vsembed.ru |
+| 10 | vidsrc.icu | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
+| 11 | vidsrc.to | 🔶 | — | — | Cloudnestra CDN via vsembed.ru |
+| 12 | vidsrcme.su | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
+| 13 | vsrc.su | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
+| 14 | vidapi.xyz | 🔶 | — | — | React app — needs headless browser |
+| 15 | vidsrc.rip | ❌ | — | — | Dead — redirects to ad network |
 
-| Source | Qualities | Subtitles | How It Works |
-|--------|-----------|-----------|--------------|
-| **vaplayer.ru** | 360p → 1080p | ✗ | JSON API → HLS master playlist |
-| **ezvidapi.com** | 720p → 1080p | 7-12 langs | Proxied m3u8 → quality variants |
-| **vidlink.pro** | 360p → 1080p | 4-30 langs | Encrypted API → HLS + captions |
-| **videasy.net** | 480p → 4K | 67-152 langs | Encrypted API → decrypt → sources |
-| **vixsrc.to** | varies | ✗ | API → embed page → stream URLs |
+> **Note on "Embed" sources:** These pages load successfully but the HLS streams are hidden behind client-side JavaScript (React, Next.js, or Cloudflare Turnstile). They will work in environments where a real browser runs the JS — like the SkyStream plugin on your device.
 
 ## 🏗 Architecture
 
@@ -157,8 +169,9 @@ Tests each of the 15 sources individually across 4 movies + 4 TV shows, then run
 A GitHub Actions workflow runs **every 8 hours** (`0 */8 * * *`) and:
 
 1. Tests all 15 sources against **7 TMDB movies**
-2. Generates a detailed **[SOURCE_HEALTH.md](./SOURCE_HEALTH.md)** report
-3. Commits the updated report back to the repo
+2. Updates the status box at the top of this README
+3. Generates a detailed **[SOURCE_HEALTH.md](./SOURCE_HEALTH.md)** report with per-movie breakdown
+4. Commits everything back to the repo
 
 You can also trigger it manually from the [Actions tab](https://github.com/sunriseve/multisource-api/actions/workflows/source-health.yml).
 

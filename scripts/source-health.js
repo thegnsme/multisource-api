@@ -157,7 +157,7 @@ function generateReport(results, elapsed) {
   return md;
 }
 
-// ── Update README.md with live status badge ───────────────────────────────
+// ── Update README.md with live status box ─────────────────────────────────
 
 function updateReadmeStatus(working, failed, total) {
   const readmePath = path.join(__dirname, '..', 'README.md');
@@ -166,11 +166,18 @@ function updateReadmeStatus(working, failed, total) {
 
     const now = new Date();
     const dateStr = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-    const totalSources = total;
-    const workingLabel = working > 0 ? `🟢 ${working}/${totalSources}` : '🔴 0';
-    const statusEmoji = working > 0 ? '✅' : '❌';
+    const workingLabel = working > 0 ? `🟢 **${working}** / ${total}` : '🔴 **0**';
+    const statusIcon = working > 0 ? '✅' : '❌';
 
-    const newLine = `📊 **Last Health Check:** ${dateStr} — ${statusEmoji} ${workingLabel} sources working`;
+    const statusBlock = [
+      `> **📊 Source Health Status**`,
+      `>`,
+      `> ${statusIcon} ${workingLabel} sources working`,
+      `>`,
+      `> 🕐 **Last checked:** ${dateStr}`,
+      `>`,
+      `> [📋 Full Report →](./SOURCE_HEALTH.md)`,
+    ].join('\n');
 
     // Replace content between HEALTH_CHECK_START and HEALTH_CHECK_END markers
     const startMarker = '<!-- HEALTH_CHECK_START -->';
@@ -181,9 +188,9 @@ function updateReadmeStatus(working, failed, total) {
     if (startIdx !== -1 && endIdx !== -1) {
       const before = readme.substring(0, startIdx + startMarker.length);
       const after = readme.substring(endIdx);
-      readme = before + '\n' + newLine + '\n' + after;
+      readme = before + '\n' + statusBlock + '\n' + after;
       fs.writeFileSync(readmePath, readme, 'utf-8');
-      console.log(`✅ README.md status updated: "${newLine}"`);
+      console.log(`✅ README.md status box updated: ${working}/${total} working`);
     } else {
       console.log('⚠️  HEALTH_CHECK markers not found in README.md — skipping update');
     }
