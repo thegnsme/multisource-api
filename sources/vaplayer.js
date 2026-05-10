@@ -45,10 +45,11 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     // Convert API response to our stream format
     const meta = data.data;
     const streams = [];
+    const qMap = { '360': '360p', '480': '480p', '720': '720p', '1080': '1080p', '2160': '4K' };
 
-    for (const streamUrl of meta.stream_urls) {
-      // Try to fetch the m3u8 to get variant info
-      try {
+    // Fetch all m3u8 playlists in parallel for speed
+    const fetchResults = await Promise.allSettled(
+      (meta.stream_urls || []).map(async (streamUrl) => {
         const m3u8Resp = await axios.get(streamUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -58,46 +59,35 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
           validateStatus: () => true,
         });
 
+        const parsed = [];
         if (m3u8Resp.data?.startsWith?.('#EXTM3U')) {
-          const m3u8 = m3u8Resp.data;
-          
-          if (m3u8.includes('#EXT-X-STREAM-INF')) {
-            // Master playlist — extract each variant
-            const lines = m3u8.split('\n');
+          if (m3u8Resp.data.includes('#EXT-X-STREAM-INF')) {
+            const lines = m3u8Resp.data.split('\n');
             for (let i = 0; i < lines.length; i++) {
               if (!lines[i].startsWith('#EXT-X-STREAM-INF:')) continue;
-              
               const bw = lines[i].match(/BANDWIDTH=(\d+)/)?.[1];
               const res = lines[i].match(/RESOLUTION=(\d+x\d+)/)?.[1];
               const nl = lines[i + 1]?.trim();
-              
               if (nl && !nl.startsWith('#')) {
-                let vu = nl;
-                if (!vu.startsWith('http')) {
-                  vu = new URL(vu, streamUrl).href;
-                }
+                const vu = nl.startsWith('http') ? nl : new URL(nl, streamUrl).href;
                 const h = res ? res.split('x')[1] : '';
-                const qMap = { '360': '360p', '480': '480p', '720': '720p', '1080': '1080p', '2160': '4K' };
-                
-                streams.push({
-                  url: vu,
-                  type: 'hls',
-                  quality: qMap[h] || (h ? h + 'p' : ''),
-                  resolution: res || '',
-                  bandwidth: bw ? parseInt(bw) : undefined,
-                });
+                parsed.push({ url: vu, type: 'hls', quality: qMap[h] || (h ? h + 'p' : ''), resolution: res || '', bandwidth: bw ? parseInt(bw) : undefined });
                 i++;
               }
             }
           } else {
-            // Media playlist (single quality)
-            streams.push({ url: streamUrl, type: 'hls', quality: '', resolution: '' });
+            parsed.push({ url: streamUrl, type: 'hls', quality: '', resolution: '' });
           }
         } else {
-          streams.push({ url: streamUrl, type: 'hls', quality: '', resolution: '' });
+          parsed.push({ url: streamUrl, type: 'hls', quality: '', resolution: '' });
         }
-      } catch {
-        streams.push({ url: streamUrl, type: 'hls', quality: '', resolution: '' });
+        return parsed;
+      })
+    );
+
+    for (const r of fetchResults) {
+      if (r.status === 'fulfilled') {
+        for (const s of r.value) streams.push(s);
       }
     }
 
