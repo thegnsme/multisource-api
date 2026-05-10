@@ -51,7 +51,7 @@ curl "http://localhost:3000/api/tv/1396?season=1&episode=1"
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | 🩺 Server health (uptime, version, memory) |
-| `GET` | `/api/sources` | 📋 List all 15 sources with load status |
+| `GET` | `/api/sources` | 📋 List all 14 sources with load status |
 | `GET` | `/api/movie/:tmdbId` | 🎥 Streams for a movie |
 | `GET` | `/api/tv/:tmdbId` | 📺 Streams for a TV episode (`?season=N&episode=N`) |
 
@@ -63,7 +63,7 @@ curl "http://localhost:3000/api/tv/1396?season=1&episode=1"
   "tmdbId": 24428,
   "type": "movie",
   "workingSources": 5,
-  "totalSourcesChecked": 15,
+  "totalSourcesChecked": 14,
   "totalUniqueStreams": 20,
   "elapsed_ms": 3424,
   "sources": [
@@ -96,7 +96,7 @@ node api.js --tmdb=<TMDB_ID> [--type=movie|tv] [--season=N] [--episode=N]
 
 ## 🗺 Source Map
 
-All 15 sources currently implemented, with their working status and capabilities.
+All 14 sources currently implemented, with their working status and capabilities.
 
 **Legend:** 🟢 Working · 🔶 Embed (needs browser JS) · ❌ Unavailable
 
@@ -116,7 +116,6 @@ All 15 sources currently implemented, with their working status and capabilities
 | 12 | vidsrcme.su | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
 | 13 | vsrc.su | 🔶 | — | — | Cloudnestra CDN — Turnstile blocked |
 | 14 | vidapi.xyz | 🔶 | — | — | React app — needs headless browser |
-| 15 | vidsrc.rip | ❌ | — | — | Dead — redirects to ad network |
 
 > **Note on "Embed" sources:** These pages load successfully but the HLS streams are hidden behind client-side JavaScript (React, Next.js, or Cloudflare Turnstile). They will work in environments where a real browser runs the JS — like the SkyStream plugin on your device.
 
@@ -128,7 +127,7 @@ All 15 sources currently implemented, with their working status and capabilities
 │  (CLI)       │     │  index.js    │     │  (stdout)    │
 └─────────────┘     │  (aggregator) │     └──────────────┘
                     │               │
-┌─────────────┐     │  Runs all 15  │     ┌──────────────┐
+┌─────────────┐     │  Runs all 14  │     ┌──────────────┐
 │  server.js   │────▶│  sources in   │────▶│  JSON API    │
 │  (Express)   │     │  parallel     │     │  (HTTP)      │
 └─────────────┘     └──────────────┘     └──────────────┘
@@ -162,7 +161,7 @@ module.exports = { scrapeSource };
 node test.js
 ```
 
-Tests each of the 15 sources individually across 4 movies + 4 TV shows, then runs the aggregate. Reports per-source, per-TMDB-ID results.
+Tests each of the 14 sources individually across 4 movies + 4 TV shows, then runs the aggregate. Reports per-source, per-TMDB-ID results.
 
 ## 📊 Health Check
 
