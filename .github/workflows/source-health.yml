@@ -1,0 +1,100 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Source Health Check — runs every 8 hours
+#
+# Tests ALL sources against every TMDB ID in the list below.
+# Generates SOURCE_HEALTH.md with per-source pass/fail status and commits it
+# back to the repo so you have a live dashboard of which sources work.
+#
+# To add/remove TMDB IDs or sources — edit scripts/source-health.js
+# (the config arrays are at the top of the file).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Source Health Check
+
+on:
+  # ── Scheduled: every 8 hours ─────────────────────────────────────────────
+  schedule:
+    - cron: '0 */8 * * *'
+
+  # ── Manual trigger via GitHub UI ─────────────────────────────────────────
+  workflow_dispatch:
+
+  # ── Also run on pushes that touch sources or the health script ───────────
+  push:
+    paths:
+      - 'sources/**'
+      - 'scripts/source-health.js'
+      - '.github/workflows/source-health.yml'
+
+jobs:
+  health-check:
+    name: Source Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # ── Permission needed to commit the report back ────────────────────────
+    permissions:
+      contents: write
+
+    steps:
+      # 1. Check out the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so we can diff and commit
+          fetch-depth: 0
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      # 4. Run the health check script
+      - name: Run source health check
+        id: health
+        run: node scripts/source-health.js
+        env:
+          # Reduce cloudnestra retries in CI to speed up the run
+          CN_RETRIES: '1'
+          NODE_ENV: 'ci'
+        continue-on-error: false
+
+      # 5. Check if the report file changed
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet SOURCE_HEALTH.md 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes to SOURCE_HEALTH.md"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "SOURCE_HEALTH.md has changed"
+          fi
+
+      # 6. Commit and push the updated report
+      - name: Commit and push report
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add SOURCE_HEALTH.md
+          git commit -m "📊 Update source health report [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7. Summary — visible in the Actions tab
+      - name: Print summary
+        if: always()
+        run: |
+          if [ -f SOURCE_HEALTH.md ]; then
+            head -30 SOURCE_HEALTH.md
+          else
+            echo "SOURCE_HEALTH.md not found — script may have failed"
+          fi
