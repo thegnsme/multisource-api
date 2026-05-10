@@ -23,7 +23,7 @@ const QUALITY_MAP = { '360': '360p', '480': '480p', '720': '720p', '1080': '1080
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function fetch(url, opts = {}) {
-  const { referer, timeout = 15000, retries = 2 } = opts;
+  const { referer, timeout = 8000, retries = 1 } = opts;
   const headers = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -32,11 +32,11 @@ async function fetch(url, opts = {}) {
   };
   for (let i = 0; i <= retries; i++) {
     try {
-      const resp = await axios.get(url, { headers, timeout, maxRedirects: 5, validateStatus: () => true });
+      const resp = await axios.get(url, { headers, timeout, maxRedirects: 3, validateStatus: () => true });
       if (resp.status >= 200 && resp.status < 500) return resp;
     } catch (e) {
       if (i === retries) throw e;
-      await sleep(1000 * (i + 1));
+      await sleep(500);
     }
   }
   throw new Error(`Failed to fetch ${url}`);
@@ -63,48 +63,39 @@ async function getProrcpPage(tmdbId, type, season, episode) {
     ? `/embed/movie/${tmdbId}`
     : `/embed/tv/${tmdbId}?season=${season}&episode=${episode}`;
 
-  const maxRetries = process.env.CN_RETRIES ? parseInt(process.env.CN_RETRIES) : 5;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // 1 -- vidsrc.icu
-      const r1 = await fetch(`https://vidsrc.icu${path}`);
-      const iframe1 = r1.data.match(/<iframe[^>]+src\s*=\s*["']([^"']+)["']/i);
-      if (!iframe1) { await sleep(2000); continue; }
+  // Try once, fail fast — Turnstile will block from most IPs anyway
+  try {
+    // 1 -- vidsrc.icu
+    const r1 = await fetch(`https://vidsrc.icu${path}`, { timeout: 8000, retries: 0 });
+    const iframe1 = r1.data.match(/<iframe[^>]+src\s*=\s*["']([^"']+)["']/i);
+    if (!iframe1) throw new Error('No iframe on vidsrc.icu');
 
-      let vidsrcmeUrl = iframe1[1];
-      if (vidsrcmeUrl.startsWith('//')) vidsrcmeUrl = 'https:' + vidsrcmeUrl;
-      if (!vidsrcmeUrl.startsWith('http')) vidsrcmeUrl = new URL(vidsrcmeUrl, `https://vidsrc.icu${path}`).href;
+    let vidsrcmeUrl = iframe1[1];
+    if (vidsrcmeUrl.startsWith('//')) vidsrcmeUrl = 'https:' + vidsrcmeUrl;
+    if (!vidsrcmeUrl.startsWith('http')) vidsrcmeUrl = new URL(vidsrcmeUrl, `https://vidsrc.icu${path}`).href;
 
-      // 2 -- vidsrcme.vidsrc.icu  →  cloudnestra iframe
-      const r2 = await fetch(vidsrcmeUrl, { referer: `https://vidsrc.icu${path}` });
-      const iframe2 = r2.data.match(/<iframe[^>]+src\s*=\s*["']([^"']*cloudnestra[^"']*)["']/i);
-      if (!iframe2) { await sleep(2000); continue; }
+    // 2 -- vidsrcme.vidsrc.icu  →  cloudnestra iframe
+    const r2 = await fetch(vidsrcmeUrl, { referer: `https://vidsrc.icu${path}`, timeout: 8000, retries: 0 });
+    const iframe2 = r2.data.match(/<iframe[^>]+src\s*=\s*["']([^"']*cloudnestra[^"']*)["']/i);
+    if (!iframe2) throw new Error('No cloudnestra iframe on vidsrcme');
 
-      let cnRcpUrl = iframe2[1];
-      if (cnRcpUrl.startsWith('//')) cnRcpUrl = 'https:' + cnRcpUrl;
+    let cnRcpUrl = iframe2[1];
+    if (cnRcpUrl.startsWith('//')) cnRcpUrl = 'https:' + cnRcpUrl;
 
-      // 3 -- cloudnestra /rcp/  →  extract prorcp path
-      const r3 = await fetch(cnRcpUrl, { referer: vidsrcmeUrl, timeout: 25000 });
-      const prorcpMatch = r3.data.match(/["'](\/prorcp\/[^"']+)["']/);
+    // 3 -- cloudnestra /rcp/  →  extract prorcp path
+    const r3 = await fetch(cnRcpUrl, { referer: vidsrcmeUrl, timeout: 10000, retries: 0 });
+    const prorcpMatch = r3.data.match(/["'](\/prorcp\/[^"']+)["']/);
+    if (!prorcpMatch) throw new Error('Turnstile blocked or no prorcp path');
 
-      if (!prorcpMatch) {
-        // Turnstile or other block — retry after a short delay
-        await sleep(3000);
-        continue;
-      }
+    const prorcpFull = `https://cloudnestra.com${prorcpMatch[1]}`;
 
-      const prorcpFull = `https://cloudnestra.com${prorcpMatch[1]}`;
+    // 4 -- prorcp page (contains m3u8 with {v1} placeholders)
+    const r4 = await fetch(prorcpFull, { referer: cnRcpUrl, timeout: 10000, retries: 0 });
 
-      // 4 -- prorcp page (contains m3u8 with {v1} placeholders)
-      const r4 = await fetch(prorcpFull, { referer: cnRcpUrl, timeout: 25000 });
-
-      return { html: r4.data, prorcpUrl: prorcpFull, rcpUrl: cnRcpUrl };
-    } catch (e) {
-      await sleep(2000);
-    }
+    return { html: r4.data, prorcpUrl: prorcpFull, rcpUrl: cnRcpUrl };
+  } catch (e) {
+    throw new Error('cloudnestra: ' + e.message);
   }
-
-  throw new Error('cloudnestra rate-limited after ' + maxRetries + ' retries');
 }
 
 // ---------------------------------------------------------------------------

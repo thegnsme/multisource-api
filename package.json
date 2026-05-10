@@ -5,8 +5,7 @@
   "main": "api.js",
   "scripts": {
     "test": "node test.js",
-    "start": "node server.js",
-    "build-plugin": "node skystream-plugin/build.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.7.0",

@@ -1,9 +1,0 @@
-{
-  "name": "MultiSource",
-  "packageName": "com.multisource",
-  "description": "MultiSource video aggregator plugin - feeds from vaplayer, ezvidapi, vidlink, videasy",
-  "manifestVersion": 1,
-  "pluginLists": [
-    "https://raw.githubusercontent.com/sunriseve/multisource-api/main/dist/plugins.json"
-  ]
-}
