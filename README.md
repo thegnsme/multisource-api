@@ -1,6 +1,6 @@
 # MultiSource API
 
-Aggregate working HLS video streams from multiple sources for any TMDB movie or TV show. CLI-only, outputs JSON to stdout.
+Aggregate working HLS video streams from multiple sources for any TMDB movie or TV show. Ships as CLI, HTTP API server, and SkyStream plugin.
 
 ## Quick Start
 
@@ -15,7 +15,30 @@ Pipe through `jq` for pretty output:
 node api.js --tmdb=24428 | jq '.sources[] | select(.status=="working") | {source, streamCount: (.streams|length), subtitles: (.subtitles|length)}'
 ```
 
-## Usage
+## HTTP API Server
+
+```bash
+npm start
+```
+
+Then make requests:
+
+```
+curl http://localhost:3000/api/movie/24428
+curl "http://localhost:3000/api/tv/1396?season=1&episode=1"
+```
+
+## SkyStream Plugin
+
+Add this repository to SkyStream by entering the repo URL:
+
+```
+https://raw.githubusercontent.com/sunriseve/multisource-api/main/repo.json
+```
+
+The plugin auto-discovers trending movies/TV via TMDB and aggregates streams from all 4 sources.
+
+## CLI Usage
 
 ```
 node api.js --tmdb=<TMDB_ID> [--type=movie|tv] [--season=N] [--episode=N]
@@ -44,6 +67,19 @@ node test.js
 ## Architecture
 
 Each source is a standalone file in `sources/` exporting `{ scrapeSource({tmdbId, type, season, episode}) }`. The aggregator (`sources/index.js`) runs all sources in parallel via `Promise.allSettled`, deduplicates streams by URL, and returns a unified JSON response.
+
+### SkyStream Plugin
+
+The `skystream-plugin/` directory contains a SkyStream-compatible plugin:
+- `plugin.json` — manifest
+- `plugin.js` — IIFE exporting `getHome`, `search`, `load`, `loadStreams`
+- Uses TMDB API for content discovery + all 4 source scrapers for stream resolution
+- Re-implements source scraping using sandbox `http_get`/`http_post` (no Node.js dependency)
+
+Build the `.sky` file:
+```bash
+npm run build-plugin
+```
 
 ## CI
 

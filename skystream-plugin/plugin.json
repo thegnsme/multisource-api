@@ -1,0 +1,10 @@
+{
+  "packageName": "com.multisource.api",
+  "name": "MultiSource",
+  "version": 1,
+  "baseUrl": "https://github.com/sunriseve/multisource-api",
+  "description": "Aggregates streams from vaplayer, ezvidapi, vidlink, and videasy for any TMDB movie or TV show",
+  "authors": ["MultiSource"],
+  "languages": ["en", "multi"],
+  "categories": ["Movie", "TvSeries"]
+}
