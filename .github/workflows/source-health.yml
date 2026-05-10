@@ -65,26 +65,26 @@ jobs:
           NODE_ENV: 'ci'
         continue-on-error: false
 
-      # 5. Check if the report file changed
+      # 5. Check if any tracked file changed
       - name: Check for changes
         id: changes
         run: |
-          if git diff --quiet SOURCE_HEALTH.md 2>/dev/null; then
+          if git diff --quiet SOURCE_HEALTH.md README.md 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No changes to SOURCE_HEALTH.md"
+            echo "No changes to SOURCE_HEALTH.md or README.md"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "SOURCE_HEALTH.md has changed"
+            git diff --stat SOURCE_HEALTH.md README.md 2>/dev/null || true
           fi
 
-      # 6. Commit and push the updated report
+      # 6. Commit and push the updated files
       - name: Commit and push report
         if: steps.changes.outputs.changed == 'true'
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add SOURCE_HEALTH.md
-          git commit -m "📊 Update source health report [skip ci]"
+          git add SOURCE_HEALTH.md README.md
+          git commit -m "📊 Update source health report + status badge [skip ci]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

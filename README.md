@@ -1,8 +1,19 @@
-# MultiSource API
+# 🎬 MultiSource API
 
-Aggregate working HLS video streams from multiple sources for any TMDB movie or TV show. Ships as a **CLI** and an **HTTP API server**.
+> Aggregate working HLS video streams from multiple sources for any TMDB movie or TV show. Ships as a **CLI** and an **HTTP API server**.
 
-## Quick Start
+[![CI](https://github.com/sunriseve/multisource-api/actions/workflows/build.yml/badge.svg)](https://github.com/sunriseve/multisource-api/actions/workflows/build.yml)
+[![Health Check](https://github.com/sunriseve/multisource-api/actions/workflows/source-health.yml/badge.svg)](https://github.com/sunriseve/multisource-api/actions/workflows/source-health.yml)
+
+---
+
+<!-- HEALTH_CHECK_START -->
+📊 **Last Health Check:** 2026-05-10 06:36:06 UTC — ✅ 🟢 8/15 sources working
+<!-- HEALTH_CHECK_END -->
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 npm install
@@ -11,81 +22,129 @@ node api.js --tmdb=1399 --type=tv --season=1 --episode=1  # TV
 ```
 
 Pipe through `jq` for pretty output:
+
 ```bash
-node api.js --tmdb=24428 | jq '.sources[] | select(.status=="working") | {source, streamCount: (.streams|length), subtitles: (.subtitles|length)}'
+node api.js --tmdb=24428 | jq '.sources[] | select(.status=="working") | {source, streamCount: (.streams|length)}'
 ```
 
-## HTTP API Server
+## 🌐 HTTP API Server
 
 ```bash
 npm start
 ```
 
-Then make requests:
+Then open your browser or curl:
 
 ```
 curl http://localhost:3000/api/movie/24428
 curl "http://localhost:3000/api/tv/1396?season=1&episode=1"
 ```
 
-### API Endpoints
+### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Health check (uptime, version, memory) |
-| `GET` | `/api/sources` | List all 15 sources with load status |
-| `GET` | `/api/movie/:tmdbId` | Get streams for a movie |
-| `GET` | `/api/tv/:tmdbId` | Get streams for a TV episode (query: `season`, `episode`) |
+| `GET` | `/api/health` | 🩺 Server health (uptime, version, memory) |
+| `GET` | `/api/sources` | 📋 List all 15 sources with load status |
+| `GET` | `/api/movie/:tmdbId` | 🎥 Streams for a movie |
+| `GET` | `/api/tv/:tmdbId` | 📺 Streams for a TV episode (`?season=N&episode=N`) |
 
-### Response Format
+### Example Response
 
 ```json
 {
   "success": true,
   "tmdbId": 24428,
   "type": "movie",
+  "workingSources": 5,
+  "totalSourcesChecked": 15,
+  "totalUniqueStreams": 20,
+  "elapsed_ms": 3424,
   "sources": [
     {
       "source": "videasy.net",
       "status": "working",
       "streams": [
-        {
-          "url": "https://...master.m3u8",
-          "quality": "1080p",
-          "resolution": "1920x1080",
-          "bandwidth": 8000000
-        }
+        { "url": "https://...master.m3u8", "quality": "1080p", "resolution": "1920x1080", "bandwidth": 8000000 }
       ],
       "subtitles": [
-        {
-          "lang": "en",
-          "language": "English",
-          "url": "https://...sub.vtt"
-        }
-      ],
-      "latency_ms": 3146
+        { "lang": "en", "language": "English", "url": "https://...sub.vtt" }
+      ]
     }
-  ],
-  "workingSources": 5,
-  "totalSourcesChecked": 15,
-  "totalUniqueStreams": 20,
-  "elapsed_ms": 3424,
-  "timestamp": "2026-05-10T..."
+  ]
 }
 ```
 
-## CLI Usage
+## 💻 CLI Usage
 
 ```
 node api.js --tmdb=<TMDB_ID> [--type=movie|tv] [--season=N] [--episode=N]
 ```
 
-- `--tmdb` — TMDB ID (required)
-- `--type` — `movie` (default) or `tv`
-- `--season` — season number (default: 1, only for tv)
-- `--episode` — episode number (default: 1, only for tv)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--tmdb` | — | TMDB ID (required) |
+| `--type` | `movie` | `movie` or `tv` |
+| `--season` | `1` | Season number (TV only) |
+| `--episode` | `1` | Episode number (TV only) |
 
-## Running Tests
+## ✅ Source Status
+
+See the full **[Source Health Report](./SOURCE_HEALTH.md)** — auto-generated every 8 hours with per-source, per-movie results.
+
+| Status | Meaning |
+|--------|---------|
+| 🟢 **Working** | Returns real HLS streams via HTTP API |
+| 🔶 **Embed** | Page loads but streams need browser JavaScript |
+| ❌ **Unavailable** | Dead source — no video content |
+
+### Current Working Sources
+
+| Source | Qualities | Subtitles | How It Works |
+|--------|-----------|-----------|--------------|
+| **vaplayer.ru** | 360p → 1080p | ✗ | JSON API → HLS master playlist |
+| **ezvidapi.com** | 720p → 1080p | 7-12 langs | Proxied m3u8 → quality variants |
+| **vidlink.pro** | 360p → 1080p | 4-30 langs | Encrypted API → HLS + captions |
+| **videasy.net** | 480p → 4K | 67-152 langs | Encrypted API → decrypt → sources |
+| **vixsrc.to** | varies | ✗ | API → embed page → stream URLs |
+
+## 🏗 Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│   api.js     │────▶│  sources/    │────▶│  JSON Output │
+│  (CLI)       │     │  index.js    │     │  (stdout)    │
+└─────────────┘     │  (aggregator) │     └──────────────┘
+                    │               │
+┌─────────────┐     │  Runs all 15  │     ┌──────────────┐
+│  server.js   │────▶│  sources in   │────▶│  JSON API    │
+│  (Express)   │     │  parallel     │     │  (HTTP)      │
+└─────────────┘     └──────────────┘     └──────────────┘
+```
+
+Each source is a standalone file in `sources/` exporting `{ scrapeSource() }`. The aggregator auto-discovers them — **no registration needed**.
+
+### Adding a New Source
+
+```js
+// sources/mysource.js
+async function scrapeSource({ tmdbId, type, season, episode }) {
+  return {
+    source: 'mysource.com',
+    status: 'working',
+    streams: [
+      { url: 'https://...master.m3u8', quality: '1080p', resolution: '1920x1080' }
+    ],
+    subtitles: [
+      { lang: 'en', language: 'English', url: 'https://...sub.vtt' }
+    ],
+    latency_ms: Date.now() - start,
+  };
+}
+module.exports = { scrapeSource };
+```
+
+## 🧪 Running Tests
 
 ```bash
 node test.js
@@ -93,57 +152,22 @@ node test.js
 
 Tests each of the 15 sources individually across 4 movies + 4 TV shows, then runs the aggregate. Reports per-source, per-TMDB-ID results.
 
-## Source Status
+## 📊 Health Check
 
-| # | Source | Status | Method / Reason |
-|---|--------|--------|----------------|
-| 1 | **vaplayer.ru** | ✅ Working | JSON API → HLS master playlist (360p-1080p) |
-| 2 | **ezvidapi.com** | ✅ Working | Proxied API → m3u8 with quality variants + 7-12 subtitles |
-| 3 | **vidlink.pro** | ✅ Working | enc-dec.app encrypt → vidlink.pro API → HLS + captions |
-| 4 | **videasy.net** | ✅ Working | videasy API + enc-dec.app decrypt → 4K/1080p/720p/480p + 67-152 subtitles |
-| 5 | **vixsrc.to** | ✅ Working | API → embed page with `window.streams` URLs (movies only; TV format supported) |
-| 6 | cinesrc.st | 🔶 Embed | Next.js RSC — streams loaded client-side via JS |
-| 7 | cloudnestra.com | 🔶 Embed | Cloudflare Turnstile blocked from server IP |
-| 8 | vidsrc-embed.su | 🔶 Embed | Cloudnestra CDN — Turnstile blocked |
-| 9 | vidsrc.fyi | 🔶 Embed | Cloudnestra CDN via vsembed.ru — Turnstile blocked |
-| 10 | vidsrc.icu | 🔶 Embed | Cloudnestra CDN — Turnstile blocked |
-| 11 | vidsrc.to | 🔶 Embed | Cloudnestra CDN via vsembed.ru — Turnstile blocked |
-| 12 | vidsrcme.su | 🔶 Embed | Cloudnestra CDN — Turnstile blocked |
-| 13 | vsrc.su | 🔶 Embed | Cloudnestra CDN — Turnstile blocked |
-| 14 | vidapi.xyz | 🔶 Embed | React app — needs headless browser |
-| 15 | vidsrc.rip | ❌ Dead | Redirects to ad network (bulsis.net) |
+A GitHub Actions workflow runs **every 8 hours** (`0 */8 * * *`) and:
 
-### Legend
-- ✅ **Working** — Returns real HLS streams
-- 🔶 **Embed** — Page loads, but streams require JS execution (embed URL provided)
-- ❌ **Dead** — No video content available
+1. Tests all 15 sources against **7 TMDB movies**
+2. Generates a detailed **[SOURCE_HEALTH.md](./SOURCE_HEALTH.md)** report
+3. Commits the updated report back to the repo
 
-## Architecture
+You can also trigger it manually from the [Actions tab](https://github.com/sunriseve/multisource-api/actions/workflows/source-health.yml).
 
-Each source is a standalone file in `sources/` exporting `{ scrapeSource({tmdbId, type, season, episode}) }`. The aggregator (`sources/index.js`) runs all 15 sources in parallel with a 30s per-source timeout, deduplicates streams by URL, and returns a unified JSON response.
+## 🔧 CI
 
-### Adding a new source
+[![CI](https://github.com/sunriseve/multisource-api/actions/workflows/build.yml/badge.svg)](https://github.com/sunriseve/multisource-api/actions/workflows/build.yml)
 
-1. Create `sources/yoursource.js` following the pattern:
-   ```js
-   async function scrapeSource({ tmdbId, type, season, episode }) {
-     // Your scraping logic
-     return {
-       source: 'yoursource.com',
-       status: 'working',
-       streams: [{ url: 'https://...master.m3u8', quality: '1080p', resolution: '1920x1080' }],
-       subtitles: [{ lang: 'en', language: 'English', url: 'https://...sub.vtt' }],
-       latency_ms: Date.now() - start,
-     };
-   }
-   module.exports = { scrapeSource };
-   ```
-2. The aggregator auto-discovers it — no registration needed
+GitHub Actions runs the full test suite on push across Node 18, 20, and 22.
 
-## Cloudnestra Note
+---
 
-The 6 cloudnestra-chain sources (vidsrc.icu, vidsrc.to, vidsrc.fyi, vidsrcme.su, vsrc.su, vidsrc-embed.su) all use the same CDN backend at `cloudnestra.com`. From this server's IP, Cloudflare Turnstile blocks direct access. The scraper code is correct and will return HLS streams from IPs not flagged by Cloudflare. These sources fail fast (<3s) when blocked.
-
-## CI
-
-GitHub Actions runs the full test suite (15 sources × 8 TMDB IDs + aggregate) on push across Node 18/20/22.
+_Made with ❤️ for the streaming community_

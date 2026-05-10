@@ -157,6 +157,41 @@ function generateReport(results, elapsed) {
   return md;
 }
 
+// ── Update README.md with live status badge ───────────────────────────────
+
+function updateReadmeStatus(working, failed, total) {
+  const readmePath = path.join(__dirname, '..', 'README.md');
+  try {
+    let readme = fs.readFileSync(readmePath, 'utf-8');
+
+    const now = new Date();
+    const dateStr = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    const totalSources = total;
+    const workingLabel = working > 0 ? `🟢 ${working}/${totalSources}` : '🔴 0';
+    const statusEmoji = working > 0 ? '✅' : '❌';
+
+    const newLine = `📊 **Last Health Check:** ${dateStr} — ${statusEmoji} ${workingLabel} sources working`;
+
+    // Replace content between HEALTH_CHECK_START and HEALTH_CHECK_END markers
+    const startMarker = '<!-- HEALTH_CHECK_START -->';
+    const endMarker = '<!-- HEALTH_CHECK_END -->';
+    const startIdx = readme.indexOf(startMarker);
+    const endIdx = readme.indexOf(endMarker);
+
+    if (startIdx !== -1 && endIdx !== -1) {
+      const before = readme.substring(0, startIdx + startMarker.length);
+      const after = readme.substring(endIdx);
+      readme = before + '\n' + newLine + '\n' + after;
+      fs.writeFileSync(readmePath, readme, 'utf-8');
+      console.log(`✅ README.md status updated: "${newLine}"`);
+    } else {
+      console.log('⚠️  HEALTH_CHECK markers not found in README.md — skipping update');
+    }
+  } catch (err) {
+    console.error('❌ Failed to update README.md:', err.message);
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -246,9 +281,13 @@ async function main() {
   const totalElapsed = ((Date.now() - startAll) / 1000).toFixed(1);
   const report = generateReport(results, totalElapsed);
 
-  // Write to file
+  // Write the full report
   fs.writeFileSync(OUTPUT_FILE, report, 'utf-8');
   console.log(`Report written to ${OUTPUT_FILE}`);
+
+  // ── Update README.md status line ────────────────────────────────────────
+  updateReadmeStatus(workingCount, failedCount, sources.length);
+
   console.log(`\n📊 Summary: ${workingCount} 🟢 working, ${failedCount} 🔴 not working, ${sources.length - workingCount - failedCount} ⚠️ load error`);
   console.log(`⏱  Total runtime: ${totalElapsed}s\n`);
 
