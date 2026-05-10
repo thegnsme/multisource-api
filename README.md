@@ -10,9 +10,9 @@
 <!-- HEALTH_CHECK_START -->
 > **📊 Source Health Status**
 >
-> ✅ 🟢 **5** / 15 sources working
+> ✅ 🟢 **5** / 14 sources working
 >
-> 🕐 **Last checked:** 2026-05-10 06:43:56 UTC
+> 🕐 **Last checked:** 2026-05-10 06:47:52 UTC
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
