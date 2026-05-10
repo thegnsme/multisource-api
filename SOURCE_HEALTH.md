@@ -1,11 +1,11 @@
 # 📊 Source Health Report
 
-**Generated:** 2026-05-10 06:36:06 UTC  
+**Generated:** 2026-05-10 06:43:56 UTC  
 **Total Sources:** 15  
-**🟢 Working:** 8  
-**🔴 Not Working:** 7  
+**🟢 Working:** 5  
+**🔴 Not Working:** 10  
 **⚠️ Load Error:** 0  
-**Runtime:** 43.7s  
+**Runtime:** 19.8s  
 **Movies Tested:** `Interstellar`, `Avengers: Endgame`, `The Dark Knight Rises`, `The Super Mario Bros. Movie`, `Avatar: Fire and Ash`, `Fight Club`, `The Nice Guys`
 
 ## Summary
@@ -14,17 +14,17 @@
 |--------|--------|--------------|--------------|--------------|
 | 🔴 cinesrc.st             | Not Working  | 0 | 7 | 0 |
 | 🔴 cloudnestra            | Not Working  | 0 | 7 | 0 |
-| 🟢 ezvidapi.com           | Working      | 6 | 1 | 12 |
-| 🟢 vaplayer               | Working      | 6 | 1 | 49 |
+| 🟢 ezvidapi.com           | Working      | 7 | 0 | 13 |
+| 🟢 vaplayer               | Working      | 7 | 0 | 25 |
 | 🔴 vidapi.xyz             | Not Working  | 0 | 7 | 0 |
-| 🟢 videasy.net            | Working      | 6 | 1 | 23 |
+| 🟢 videasy.net            | Working      | 7 | 0 | 27 |
 | 🟢 vidlink.pro            | Working      | 7 | 0 | 21 |
-| 🟢 vidsrc.embed.su        | Working      | 1 | 6 | 6 |
-| 🟢 vidsrc.fyi             | Working      | 1 | 6 | 6 |
+| 🔴 vidsrc.embed.su        | Not Working  | 0 | 7 | 0 |
+| 🔴 vidsrc.fyi             | Not Working  | 0 | 7 | 0 |
 | 🔴 vidsrc.icu             | Not Working  | 0 | 7 | 0 |
 | 🔴 vidsrc.rip             | Not Working  | 0 | 7 | 0 |
 | 🔴 vidsrc.to              | Not Working  | 0 | 7 | 0 |
-| 🟢 vidsrcme.su            | Working      | 1 | 6 | 6 |
+| 🔴 vidsrcme.su            | Not Working  | 0 | 7 | 0 |
 | 🟢 vixsrc.to              | Working      | 7 | 0 | 7 |
 | 🔴 vsrc.su                | Not Working  | 0 | 7 | 0 |
 
@@ -34,181 +34,181 @@
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5209ms |
-| Avengers: Endgame                   | ❌ | embed                | 1031ms |
-| The Dark Knight Rises               | ❌ | embed                | 318ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 916ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 367ms |
-| Fight Club                          | ❌ | embed                | 52ms |
-| The Nice Guys                       | ❌ | embed                | 957ms |
+| Interstellar                        | ❌ | embed                | 377ms |
+| Avengers: Endgame                   | ❌ | embed                | 31ms |
+| The Dark Knight Rises               | ❌ | embed                | 34ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 31ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 35ms |
+| Fight Club                          | ❌ | embed                | 33ms |
+| The Nice Guys                       | ❌ | embed                | 41ms |
 
 ### 🔴 cloudnestra
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5066ms |
-| Avengers: Endgame                   | ❌ | embed                | 3051ms |
-| The Dark Knight Rises               | ❌ | embed                | 2082ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2873ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 1984ms |
-| Fight Club                          | ❌ | embed                | 5047ms |
-| The Nice Guys                       | ❌ | embed                | 3332ms |
+| Interstellar                        | ❌ | embed                | 58ms |
+| Avengers: Endgame                   | ❌ | embed                | 29ms |
+| The Dark Knight Rises               | ❌ | embed                | 33ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 30ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 34ms |
+| Fight Club                          | ❌ | embed                | 29ms |
+| The Nice Guys                       | ❌ | embed                | 36ms |
 
 ### 🟢 ezvidapi.com
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ✅ | 2 streams            | 6878ms |
-| Avengers: Endgame                   | ✅ | 2 streams            | 2151ms |
-| The Dark Knight Rises               | ✅ | 2 streams            | 1143ms |
-| The Super Mario Bros. Movie         | ✅ | 2 streams            | 3165ms |
-| Avatar: Fire and Ash                | ✅ | 2 streams            | 962ms |
-| Fight Club                          | ❌ | embed                | 8674ms |
-| The Nice Guys                       | ✅ | 2 streams            | 2243ms |
+| Interstellar                        | ✅ | 2 streams            | 1370ms |
+| Avengers: Endgame                   | ✅ | 2 streams            | 698ms |
+| The Dark Knight Rises               | ✅ | 2 streams            | 2300ms |
+| The Super Mario Bros. Movie         | ✅ | 2 streams            | 634ms |
+| Avatar: Fire and Ash                | ✅ | 2 streams            | 629ms |
+| Fight Club                          | ✅ | 1 streams            | 12276ms |
+| The Nice Guys                       | ✅ | 2 streams            | 861ms |
 
 ### 🟢 vaplayer
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ✅ | 8 streams            | 7935ms |
-| Avengers: Endgame                   | ✅ | 10 streams           | 2329ms |
-| The Dark Knight Rises               | ✅ | 10 streams           | 5917ms |
-| The Super Mario Bros. Movie         | ✅ | 1 streams            | 1488ms |
-| Avatar: Fire and Ash                | ✅ | 10 streams           | 2213ms |
-| Fight Club                          | ❌ | error                | 10043ms |
-| The Nice Guys                       | ✅ | 10 streams           | 2746ms |
+| Interstellar                        | ✅ | 4 streams            | 1513ms |
+| Avengers: Endgame                   | ✅ | 4 streams            | 793ms |
+| The Dark Knight Rises               | ✅ | 4 streams            | 966ms |
+| The Super Mario Bros. Movie         | ✅ | 1 streams            | 787ms |
+| Avatar: Fire and Ash                | ✅ | 4 streams            | 788ms |
+| Fight Club                          | ✅ | 4 streams            | 536ms |
+| The Nice Guys                       | ✅ | 4 streams            | 868ms |
 
 ### 🔴 vidapi.xyz
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5060ms |
-| Avengers: Endgame                   | ❌ | embed                | 1341ms |
-| The Dark Knight Rises               | ❌ | embed                | 816ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 937ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 467ms |
-| Fight Club                          | ❌ | embed                | 5044ms |
-| The Nice Guys                       | ❌ | embed                | 1370ms |
+| Interstellar                        | ❌ | embed                | 402ms |
+| Avengers: Endgame                   | ❌ | embed                | 23ms |
+| The Dark Knight Rises               | ❌ | embed                | 25ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 27ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 29ms |
+| Fight Club                          | ❌ | embed                | 27ms |
+| The Nice Guys                       | ❌ | embed                | 32ms |
 
 ### 🟢 videasy.net
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ✅ | 4 streams            | 7864ms |
-| Avengers: Endgame                   | ✅ | 4 streams            | 2679ms |
-| The Dark Knight Rises               | ✅ | 4 streams            | 1940ms |
-| The Super Mario Bros. Movie         | ✅ | 4 streams            | 2944ms |
-| Avatar: Fire and Ash                | ❌ | error                | 3060ms |
-| Fight Club                          | ✅ | 3 streams            | 7825ms |
-| The Nice Guys                       | ✅ | 4 streams            | 1521ms |
+| Interstellar                        | ✅ | 4 streams            | 1097ms |
+| Avengers: Endgame                   | ✅ | 4 streams            | 1051ms |
+| The Dark Knight Rises               | ✅ | 4 streams            | 786ms |
+| The Super Mario Bros. Movie         | ✅ | 4 streams            | 694ms |
+| Avatar: Fire and Ash                | ✅ | 4 streams            | 810ms |
+| Fight Club                          | ✅ | 3 streams            | 961ms |
+| The Nice Guys                       | ✅ | 4 streams            | 193ms |
 
 ### 🟢 vidlink.pro
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ✅ | 3 streams            | 12708ms |
-| Avengers: Endgame                   | ✅ | 3 streams            | 1811ms |
-| The Dark Knight Rises               | ✅ | 3 streams            | 792ms |
-| The Super Mario Bros. Movie         | ✅ | 3 streams            | 1758ms |
-| Avatar: Fire and Ash                | ✅ | 3 streams            | 692ms |
-| Fight Club                          | ✅ | 3 streams            | 7953ms |
-| The Nice Guys                       | ✅ | 3 streams            | 743ms |
+| Interstellar                        | ✅ | 3 streams            | 978ms |
+| Avengers: Endgame                   | ✅ | 3 streams            | 233ms |
+| The Dark Knight Rises               | ✅ | 3 streams            | 230ms |
+| The Super Mario Bros. Movie         | ✅ | 3 streams            | 227ms |
+| Avatar: Fire and Ash                | ✅ | 3 streams            | 231ms |
+| Fight Club                          | ✅ | 3 streams            | 368ms |
+| The Nice Guys                       | ✅ | 3 streams            | 269ms |
 
-### 🟢 vidsrc.embed.su
-
-| Movie | Status | Streams | Time |
-|-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5043ms |
-| Avengers: Endgame                   | ❌ | embed                | 2548ms |
-| The Dark Knight Rises               | ❌ | embed                | 1611ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2568ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 833ms |
-| Fight Club                          | ❌ | embed                | 5035ms |
-| The Nice Guys                       | ✅ | 6 streams            | 4587ms |
-
-### 🟢 vidsrc.fyi
+### 🔴 vidsrc.embed.su
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5041ms |
-| Avengers: Endgame                   | ❌ | embed                | 3505ms |
-| The Dark Knight Rises               | ❌ | embed                | 1181ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2726ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 354ms |
-| Fight Club                          | ❌ | embed                | 20ms |
-| The Nice Guys                       | ✅ | 6 streams            | 4694ms |
+| Interstellar                        | ❌ | embed                | 1309ms |
+| Avengers: Endgame                   | ❌ | embed                | 656ms |
+| The Dark Knight Rises               | ❌ | embed                | 282ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 278ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 155ms |
+| Fight Club                          | ❌ | embed                | 153ms |
+| The Nice Guys                       | ❌ | embed                | 521ms |
+
+### 🔴 vidsrc.fyi
+
+| Movie | Status | Streams | Time |
+|-------|--------|---------|------|
+| Interstellar                        | ❌ | embed                | 1483ms |
+| Avengers: Endgame                   | ❌ | embed                | 824ms |
+| The Dark Knight Rises               | ❌ | embed                | 164ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 164ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 167ms |
+| Fight Club                          | ❌ | embed                | 164ms |
+| The Nice Guys                       | ❌ | embed                | 881ms |
 
 ### 🔴 vidsrc.icu
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5038ms |
-| Avengers: Endgame                   | ❌ | embed                | 3402ms |
-| The Dark Knight Rises               | ❌ | embed                | 2128ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2378ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 2158ms |
-| Fight Club                          | ❌ | embed                | 5027ms |
-| The Nice Guys                       | ❌ | embed                | 3454ms |
+| Interstellar                        | ❌ | embed                | 501ms |
+| Avengers: Endgame                   | ❌ | embed                | 23ms |
+| The Dark Knight Rises               | ❌ | embed                | 24ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 28ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 21ms |
+| Fight Club                          | ❌ | embed                | 26ms |
+| The Nice Guys                       | ❌ | embed                | 26ms |
 
 ### 🔴 vidsrc.rip
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | unavailable          | 25ms |
-| Avengers: Endgame                   | ❌ | unavailable          | 13ms |
-| The Dark Knight Rises               | ❌ | unavailable          | 23ms |
-| The Super Mario Bros. Movie         | ❌ | unavailable          | 17ms |
-| Avatar: Fire and Ash                | ❌ | unavailable          | 8ms |
-| Fight Club                          | ❌ | unavailable          | 10ms |
-| The Nice Guys                       | ❌ | unavailable          | 15ms |
+| Interstellar                        | ❌ | unavailable          | 8ms |
+| Avengers: Endgame                   | ❌ | unavailable          | 3ms |
+| The Dark Knight Rises               | ❌ | unavailable          | 3ms |
+| The Super Mario Bros. Movie         | ❌ | unavailable          | 3ms |
+| Avatar: Fire and Ash                | ❌ | unavailable          | 3ms |
+| Fight Club                          | ❌ | unavailable          | 4ms |
+| The Nice Guys                       | ❌ | unavailable          | 5ms |
 
 ### 🔴 vidsrc.to
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5036ms |
-| Avengers: Endgame                   | ❌ | embed                | 2876ms |
-| The Dark Knight Rises               | ❌ | embed                | 1241ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2692ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 444ms |
-| Fight Club                          | ❌ | embed                | 16ms |
-| The Nice Guys                       | ❌ | embed                | 3417ms |
+| Interstellar                        | ❌ | embed                | 522ms |
+| Avengers: Endgame                   | ❌ | embed                | 23ms |
+| The Dark Knight Rises               | ❌ | embed                | 24ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 23ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 21ms |
+| Fight Club                          | ❌ | embed                | 23ms |
+| The Nice Guys                       | ❌ | embed                | 28ms |
 
-### 🟢 vidsrcme.su
+### 🔴 vidsrcme.su
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5034ms |
-| Avengers: Endgame                   | ❌ | embed                | 2097ms |
-| The Dark Knight Rises               | ❌ | embed                | 496ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2058ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 803ms |
-| Fight Club                          | ❌ | embed                | 5026ms |
-| The Nice Guys                       | ✅ | 6 streams            | 4127ms |
+| Interstellar                        | ❌ | embed                | 1308ms |
+| Avengers: Endgame                   | ❌ | embed                | 290ms |
+| The Dark Knight Rises               | ❌ | embed                | 360ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 399ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 275ms |
+| Fight Club                          | ❌ | embed                | 277ms |
+| The Nice Guys                       | ❌ | embed                | 489ms |
 
 ### 🟢 vixsrc.to
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ✅ | 1 streams            | 7163ms |
-| Avengers: Endgame                   | ✅ | 1 streams            | 1981ms |
-| The Dark Knight Rises               | ✅ | 1 streams            | 981ms |
-| The Super Mario Bros. Movie         | ✅ | 1 streams            | 1029ms |
-| Avatar: Fire and Ash                | ✅ | 1 streams            | 985ms |
-| Fight Club                          | ✅ | 1 streams            | 7520ms |
-| The Nice Guys                       | ✅ | 1 streams            | 1048ms |
+| Interstellar                        | ✅ | 1 streams            | 1268ms |
+| Avengers: Endgame                   | ✅ | 1 streams            | 593ms |
+| The Dark Knight Rises               | ✅ | 1 streams            | 580ms |
+| The Super Mario Bros. Movie         | ✅ | 1 streams            | 592ms |
+| Avatar: Fire and Ash                | ✅ | 1 streams            | 627ms |
+| Fight Club                          | ✅ | 1 streams            | 624ms |
+| The Nice Guys                       | ✅ | 1 streams            | 653ms |
 
 ### 🔴 vsrc.su
 
 | Movie | Status | Streams | Time |
 |-------|--------|---------|------|
-| Interstellar                        | ❌ | embed                | 5030ms |
-| Avengers: Endgame                   | ❌ | embed                | 2918ms |
-| The Dark Knight Rises               | ❌ | embed                | 1541ms |
-| The Super Mario Bros. Movie         | ❌ | embed                | 2970ms |
-| Avatar: Fire and Ash                | ❌ | embed                | 784ms |
-| Fight Club                          | ❌ | embed                | 5022ms |
-| The Nice Guys                       | ❌ | embed                | 3226ms |
+| Interstellar                        | ❌ | embed                | 1318ms |
+| Avengers: Endgame                   | ❌ | embed                | 503ms |
+| The Dark Knight Rises               | ❌ | embed                | 282ms |
+| The Super Mario Bros. Movie         | ❌ | embed                | 274ms |
+| Avatar: Fire and Ash                | ❌ | embed                | 155ms |
+| Fight Club                          | ❌ | embed                | 138ms |
+| The Nice Guys                       | ❌ | embed                | 646ms |
 
 ## Legend
 
