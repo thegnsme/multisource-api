@@ -20,7 +20,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
 
   try {
     // 1 — Fetch vidsrc.to (simple page with iframe to vsembed.ru)
-    const r1 = await cn.fetch(embed, { timeout: 8000, retries: 0 });
+    const r1 = await cn.fetch(embed, { timeout: 5000 });
     if (!r1.data) throw new Error('No response from vidsrc.to');
 
     const iframe1 = r1.data.match(/<iframe[^>]+src\s*=\s*["']([^"']+)["']/i);
@@ -31,7 +31,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     if (!vsembedUrl.startsWith('http')) vsembedUrl = new URL(vsembedUrl, embed).href;
 
     // 2 — Fetch vsembed.ru page (contains cloudnestra iframe + embedded player)
-    const r2 = await cn.fetch(vsembedUrl, { referer: embed, timeout: 10000, retries: 0 });
+    const r2 = await cn.fetch(vsembedUrl, { referer: embed, timeout: 5000 });
     if (!r2.data) throw new Error('No response from vsembed.ru');
 
     // 3 — Extract cloudnestra iframe from vsembed page
@@ -42,7 +42,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     if (cnRcpUrl.startsWith('//')) cnRcpUrl = 'https:' + cnRcpUrl;
 
     // 4 — Fetch cloudnestra /rcp/ page
-    const r3 = await cn.fetch(cnRcpUrl, { referer: vsembedUrl, timeout: 10000, retries: 0 });
+    const r3 = await cn.fetch(cnRcpUrl, { referer: vsembedUrl, timeout: 5000 });
 
     // 5 — Extract prorcp path
     const prorcpMatch = r3.data.match(/["'](\/prorcp\/[^"']+)["']/);
@@ -51,7 +51,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     const prorcpFull = `https://cloudnestra.com${prorcpMatch[1]}`;
 
     // 6 — Fetch prorcp page (contains m3u8 URLs)
-    const r4 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 10000, retries: 0 });
+    const r4 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 5000 });
     const html = r4.data;
 
     // 7 — Extract m3u8 raw URLs
@@ -66,7 +66,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     const seen = new Set();
     for (const rawUrl of resolved) {
       try {
-        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 8000, retries: 0 });
+        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 5000 });
         if (resp.data?.startsWith?.('#EXTM3U')) {
           for (const v of cn.parseMasterPlaylist(resp.data, rawUrl)) {
             if (!seen.has(v.url)) { seen.add(v.url); allStreams.push(v); }

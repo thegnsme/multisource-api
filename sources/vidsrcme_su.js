@@ -22,7 +22,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
 
   try {
     // 1 — Fetch the vidsrcme.su embed page
-    const r1 = await cn.fetch(embed, { timeout: 8000, retries: 0 });
+    const r1 = await cn.fetch(embed, { timeout: 5000 });
     if (!r1.data) throw new Error('No response from vidsrcme.su');
 
     // 2 — Extract cloudnestra iframe (direct, no intermediary)
@@ -33,7 +33,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     if (cnRcpUrl.startsWith('//')) cnRcpUrl = 'https:' + cnRcpUrl;
 
     // 3 — Fetch cloudnestra /rcp/ page
-    const r2 = await cn.fetch(cnRcpUrl, { referer: embed, timeout: 10000, retries: 0 });
+    const r2 = await cn.fetch(cnRcpUrl, { referer: embed, timeout: 5000 });
 
     // 4 — Extract prorcp path
     const prorcpMatch = r2.data.match(/["'](\/prorcp\/[^"']+)["']/);
@@ -42,7 +42,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     const prorcpFull = `https://cloudnestra.com${prorcpMatch[1]}`;
 
     // 5 — Fetch prorcp page (contains m3u8 URLs)
-    const r3 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 10000, retries: 0 });
+    const r3 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 5000 });
     const html = r3.data;
 
     // 6 — Extract m3u8 raw URLs
@@ -57,7 +57,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     const seen = new Set();
     for (const rawUrl of resolved) {
       try {
-        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 8000, retries: 0 });
+        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 5000 });
         if (resp.data?.startsWith?.('#EXTM3U')) {
           for (const v of cn.parseMasterPlaylist(resp.data, rawUrl)) {
             if (!seen.has(v.url)) { seen.add(v.url); allStreams.push(v); }

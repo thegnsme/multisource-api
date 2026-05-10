@@ -12,7 +12,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
   const embed = embedUrl(tmdbId, type, season, episode);
 
   try {
-    const r1 = await cn.fetch(embed, { timeout: 8000, retries: 0 });
+    const r1 = await cn.fetch(embed, { timeout: 5000 });
     if (!r1.data) throw new Error('No response');
 
     const iframeMatch = r1.data.match(/<iframe[^>]+src\s*=\s*["']([^"']*cloudnestra[^"']*)["']/i);
@@ -21,12 +21,12 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
     let cnRcpUrl = iframeMatch[1];
     if (cnRcpUrl.startsWith('//')) cnRcpUrl = 'https:' + cnRcpUrl;
 
-    const r2 = await cn.fetch(cnRcpUrl, { referer: embed, timeout: 10000, retries: 0 });
+    const r2 = await cn.fetch(cnRcpUrl, { referer: embed, timeout: 5000 });
     const prorcpMatch = r2.data.match(/["'](\/prorcp\/[^"']+)["']/);
     if (!prorcpMatch) throw new Error('No prorcp path found (Turnstile blocked)');
 
     const prorcpFull = 'https://cloudnestra.com' + prorcpMatch[1];
-    const r3 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 10000, retries: 0 });
+    const r3 = await cn.fetch(prorcpFull, { referer: cnRcpUrl, timeout: 5000 });
     const html = r3.data;
 
     const rawUrls = html.match(/https?:\/\/[^\s\"'<>`]+\.m3u8[^\s\"'<>`]*/g);
@@ -38,7 +38,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
 
     for (const rawUrl of resolved) {
       try {
-        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 8000, retries: 0 });
+        const resp = await cn.fetch(rawUrl, { referer: prorcpFull, timeout: 5000 });
         if (resp.data?.startsWith?.('#EXTM3U')) {
           for (const v of cn.parseMasterPlaylist(resp.data, rawUrl)) {
             if (!seen.has(v.url)) { seen.add(v.url); allStreams.push(v); }

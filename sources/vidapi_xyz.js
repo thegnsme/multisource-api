@@ -9,7 +9,7 @@ async function scrapeSource({ tmdbId, type, season, episode }) {
   const embedUrl = BASE + path;
 
   // Chain: vidapi.xyz → stream.vidapi.xyz/vkng → vidking.net (React app). Needs JS execution.
-  const { html, status } = await fetchUrl(embedUrl, { timeout: 10000 });
+  const { html, status } = await fetchUrl(embedUrl, { timeout: 5000 });
   const streams = [];
 
   if (html && status >= 200 && status < 400) {

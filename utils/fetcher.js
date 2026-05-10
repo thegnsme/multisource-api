@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 async function fetchUrl(url, opts = {}) {
-  const { referer, timeout = 15000, retries = 1 } = opts;
+  const { referer, timeout = 8000, retries = 0 } = opts;
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
