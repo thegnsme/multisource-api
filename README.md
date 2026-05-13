@@ -12,7 +12,7 @@
 >
 > ✅ 🟢 **5** / 14 sources working
 >
-> 🕐 **Last checked:** 2026-05-12 21:07:27 UTC
+> 🕐 **Last checked:** 2026-05-13 10:02:20 UTC
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
