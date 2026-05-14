@@ -10,9 +10,9 @@
 <!-- HEALTH_CHECK_START -->
 > **📊 Source Health Status**
 >
-> ✅ 🟢 **8** / 43 sources working
+> ✅ 🟢 **10** / 46 sources working
 >
-> 🕐 **Last checked:** 14-May-2026 11:25:59 PM IST
+> 🕐 **Last checked:** 15-May-2026 12:50:56 AM IST
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
