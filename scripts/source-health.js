@@ -97,15 +97,14 @@ function generateReport(results, elapsed) {
   const erroredSources = sources.filter(s => results[s].overall === 'load_error').length;
 
     const now = new Date();
-    const istDate = now.toLocaleString('en-IN', {
+    const p = {};
+    Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: true,
-    });
-    // Clean up format: "14-May-2026 02:25:05 PM IST"
-    const parts = istDate.split(', ');
-    const dateStr = parts.length === 2 ? `${parts[0]}-${parts[1]} IST` : `${istDate} IST`;
+    }).formatToParts(now).forEach(x => p[x.type] = x.value);
+    const dateStr = `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second} ${p.dayPeriod.toUpperCase()} IST`;
 
   let md = '';
   md += `# 📊 Source Health Report\n\n`;
@@ -174,14 +173,14 @@ function updateReadmeStatus(working, failed, total) {
     let readme = fs.readFileSync(readmePath, 'utf-8');
 
     const now = new Date();
-    const istDate = now.toLocaleString('en-IN', {
+    const p = {};
+    Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: true,
-    });
-    const istParts = istDate.split(', ');
-    const dateStr = istParts.length === 2 ? `${istParts[0]}-${istParts[1]} IST` : `${istDate} IST`;
+    }).formatToParts(now).forEach(x => p[x.type] = x.value);
+    const dateStr = `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second} ${p.dayPeriod.toUpperCase()} IST`;
     const workingLabel = working > 0 ? `🟢 **${working}** / ${total}` : '🔴 **0**';
     const statusIcon = working > 0 ? '✅' : '❌';
 
