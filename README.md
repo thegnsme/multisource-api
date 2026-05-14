@@ -12,7 +12,7 @@
 >
 > ✅ 🟢 **8** / 43 sources working
 >
-> 🕐 **Last checked:** 14-May-2026 10:37:57 PM IST
+> 🕐 **Last checked:** 14-May-2026 11:25:59 PM IST
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
