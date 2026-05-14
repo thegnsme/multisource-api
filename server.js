@@ -15,6 +15,7 @@
 
 const express = require('express');
 const { aggregateAll, sourceCount } = require('./sources');
+const { imdbToTmdb } = require('./utils/tmdb-lookup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -188,6 +189,82 @@ app.get('/api/tv/:tmdbId', async (req, res) => {
   }
 });
 
+// ── IMDB ID endpoints ────────────────────────────────────────────────────────
+
+function validateImdbId(imdbId) {
+  if (!imdbId || !imdbId.startsWith('tt')) {
+    return { valid: false, error: 'Invalid IMDB ID — must start with "tt" (e.g., tt0848228)' };
+  }
+  return { valid: true, id: imdbId };
+}
+
+// Auto-detect movie vs TV via IMDB ID
+app.get('/api/by-imdb/:imdbId', async (req, res) => {
+  const validation = validateImdbId(req.params.imdbId);
+  if (!validation.valid) {
+    return errorResponse(res, 400, validation.error);
+  }
+
+  try {
+    const lookup = await imdbToTmdb(validation.id);
+    const paramValidation = validateTvParams(req.query.season, req.query.episode);
+    const season = paramValidation.valid ? paramValidation.season : 1;
+    const episode = paramValidation.valid ? paramValidation.episode : 1;
+
+    const result = await aggregateAll(lookup.tmdbId, lookup.type, season, episode);
+    // Include IMDB lookup info in response
+    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: lookup.type, title: lookup.title };
+    res.json(result);
+  } catch (err) {
+    console.error(`Error fetching IMDB ${validation.id}:`, err.message);
+    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
+  }
+});
+
+// Movie via IMDB ID (force movie type)
+app.get('/api/movie/by-imdb/:imdbId', async (req, res) => {
+  const validation = validateImdbId(req.params.imdbId);
+  if (!validation.valid) {
+    return errorResponse(res, 400, validation.error);
+  }
+
+  try {
+    const lookup = await imdbToTmdb(validation.id);
+    if (lookup.type !== 'movie') {
+      // Force movie type anyway — user explicitly asked for movie
+    }
+    const result = await aggregateAll(lookup.tmdbId, 'movie');
+    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: 'movie (forced)', title: lookup.title };
+    res.json(result);
+  } catch (err) {
+    console.error(`Error fetching movie IMDB ${validation.id}:`, err.message);
+    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
+  }
+});
+
+// TV via IMDB ID (force TV type)
+app.get('/api/tv/by-imdb/:imdbId', async (req, res) => {
+  const validation = validateImdbId(req.params.imdbId);
+  if (!validation.valid) {
+    return errorResponse(res, 400, validation.error);
+  }
+
+  const paramValidation = validateTvParams(req.query.season, req.query.episode);
+  if (!paramValidation.valid) {
+    return errorResponse(res, 400, paramValidation.error);
+  }
+
+  try {
+    const lookup = await imdbToTmdb(validation.id);
+    const result = await aggregateAll(lookup.tmdbId, 'tv', paramValidation.season, paramValidation.episode);
+    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: 'tv (forced)', title: lookup.title };
+    res.json(result);
+  } catch (err) {
+    console.error(`Error fetching TV IMDB ${validation.id}:`, err.message);
+    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   errorResponse(res, 404, `Not found: ${req.method} ${req.path}`, {
@@ -196,6 +273,9 @@ app.use((req, res) => {
       'GET /api/sources',
       'GET /api/movie/:tmdbId',
       'GET /api/tv/:tmdbId?season=1&episode=1',
+      'GET /api/by-imdb/:imdbId',
+      'GET /api/movie/by-imdb/:imdbId',
+      'GET /api/tv/by-imdb/:imdbId?season=1&episode=1',
     ],
   });
 });
@@ -214,4 +294,6 @@ app.listen(PORT, () => {
   console.log(`  Sources: curl http://localhost:${PORT}/api/sources`);
   console.log(`  Movie:   curl http://localhost:${PORT}/api/movie/24428`);
   console.log(`  TV:      curl "http://localhost:${PORT}/api/tv/1396?season=1&episode=1"`);
+  console.log(`  IMDB:    curl http://localhost:${PORT}/api/by-imdb/tt0848228`);
+  console.log(`  IMDB TV: curl "http://localhost:${PORT}/api/tv/by-imdb/tt0903747?season=1&episode=1"`);
 });

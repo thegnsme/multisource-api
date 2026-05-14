@@ -1,38 +1,13 @@
 /**
- * vidsrc.icu — Cloudnestra CDN backend.
- *
- * Chain: vidsrc.icu/embed/movie/{id} → iframe to vidsrcme.vidsrc.icu
- * → iframe to cloudnestra.com/rcp/BASE64 → prorcp → m3u8
- *
- * Delegates to the canonical cloudnestra.js implementation.
+ * vidsrc.icu — CloudNestra embed player.
+ * Status: embed (JS-rendered, Cloudflare-protected)
  */
-
-const cloudnestra = require('./cloudnestra');
-
+const { scrapeEmbedSource } = require('../utils/embedScraper');
 const BASE = 'https://vidsrc.icu';
-
-async function scrapeSource(params) {
-  const { tmdbId, type, season, episode } = params;
+async function scrapeSource({ tmdbId, type, season, episode }) {
   const embedUrl = type === 'movie'
     ? `${BASE}/embed/movie/${tmdbId}`
-    : `${BASE}/embed/tv/${tmdbId}?season=${season || 1}&episode=${episode || 1}`;
-
-  try {
-    const result = await cloudnestra.scrapeSource(params);
-    // Override the source name
-    result.source = 'vidsrc.icu';
-    result.embedUrl = embedUrl;
-    return result;
-  } catch (err) {
-    return {
-      source: 'vidsrc.icu',
-      embedUrl,
-      status: 'embed',
-      error: err.message,
-      streams: [],
-      latency_ms: 0,
-    };
-  }
+    : `${BASE}/embed/tv/${tmdbId}/${season}/${episode}`;
+  return await scrapeEmbedSource({ name: 'vidsrc.icu', embedUrl, referer: BASE });
 }
-
 module.exports = { scrapeSource };

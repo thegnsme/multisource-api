@@ -1,4 +1,8 @@
 const axios = require('axios');
+const https = require('https');
+
+// Axios v1.x needs IPv4 forced in some environments
+const httpsAgent = new https.Agent({ family: 4, keepAlive: true, rejectUnauthorized: false });
 
 async function fetchUrl(url, opts = {}) {
   const { referer, timeout = 8000, retries = 0 } = opts;
@@ -10,7 +14,7 @@ async function fetchUrl(url, opts = {}) {
   };
   for (let i = 0; i <= retries; i++) {
     try {
-      const resp = await axios.get(url, { headers, timeout, maxRedirects: 5, validateStatus: () => true });
+      const resp = await axios.get(url, { headers, timeout, maxRedirects: 5, validateStatus: () => true, httpsAgent });
       return { html: typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data), status: resp.status };
     } catch (e) {
       if (i === retries) return { html: null, status: 0, error: e.message };

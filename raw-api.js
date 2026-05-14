@@ -11,7 +11,9 @@
  *
  * Or run locally:
  *   node raw-api.js --tmdb=24428
+ *   node raw-api.js --imdb=tt0848228
  *   node raw-api.js --tmdb=1399 --type=tv --season=1 --episode=1
+ *   node raw-api.js --imdb=tt0903747 --season=1 --episode=1
  *
  * Or imported as a module:
  *   const { scrapeAll } = require('./raw-api');
@@ -23,6 +25,10 @@
  *   • vidlink.pro      — enc-dec.app + vidlink.pro API → m3u8 with subtitles
  *   • videasy.net      — api.videasy.net + enc-dec.app decrypt → m3u8 with subtitles
  *   • vixsrc.to        — vixsrc.to API → embed page → m3u8
+ *
+ * IMDB ID support: use --imdb=tt0848228 instead of --tmdb=24428.
+ * Auto-detects movie vs TV show from TMDB response.
+ * Uses TMDB API (built-in key) to convert IMDB → TMDB ID.
  */
 
 'use strict';
@@ -34,6 +40,57 @@
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+
+// ── TMDB API key for IMDB → TMDB ID lookup ──
+const TMDB_API_KEY = '1865f43a0549ca50d341dd9ab8b29f49';
+const TMDB_BASE = 'https://api.themoviedb.org/3';
+
+/**
+ * Convert IMDB ID (tt0848228) to TMDB ID via TMDB API.
+ * Returns { tmdbId, type, title } or throws.
+ */
+async function imdbToTmdb(imdbId) {
+  const cleanId = imdbId.replace(/^https?:\/\/[^/]+\/(title\/)?/i, '').replace(/\/.*$/, '').trim();
+  if (!cleanId.startsWith('tt')) {
+    throw new Error('Invalid IMDB ID — must start with "tt" (e.g., tt0848228)');
+  }
+  const res = await fetchJson(`${TMDB_BASE}/find/${cleanId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
+  if (!res) throw new Error('TMDB API request failed');
+  if (res.movie_results && res.movie_results.length > 0) {
+    const m = res.movie_results[0];
+    return { tmdbId: m.id, type: 'movie', title: m.title || m.original_title };
+  }
+  if (res.tv_results && res.tv_results.length > 0) {
+    const t = res.tv_results[0];
+    return { tmdbId: t.id, type: 'tv', title: t.name || t.original_name };
+  }
+  throw new Error(`No TMDB ID found for: ${cleanId}`);
+}
+
+/**
+ * Fetch JSON from a URL (used by imdbToTmdb).
+ */
+function fetchJson(urlStr) {
+  return new Promise((resolve) => {
+    const parsed = new URL(urlStr);
+    const req = https.get({
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      timeout: 10000,
+      rejectUnauthorized: false,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+        catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
 
 /**
  * Fetch a URL using only built-in Node.js modules.
@@ -234,6 +291,39 @@ function dedupeStreams(streams) {
 // ──────────────────────────────────────────────────────────────────────────────
 // Section 3: Source Scrapers
 // ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * cine.su — Direct HLS API (no auth, no JS, no Cloudflare).
+ * Movie:  https://cine.su/v1/stream/master/movie/{tmdbId}.m3u8
+ * TV:     https://cine.su/v1/stream/master/tv/{tmdbId}/{season}/{episode}.m3u8
+ */
+async function scrapeCineSu({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  const apiUrl = type === 'movie'
+    ? `https://cine.su/v1/stream/master/movie/${tmdbId}.m3u8`
+    : `https://cine.su/v1/stream/master/tv/${tmdbId}/${season}/${episode}.m3u8`;
+  const embedUrl = `https://cine.su/${type === 'movie' ? 'movie' : 'tv'}/${tmdbId}` +
+    (type === 'tv' ? `/${season}/${episode}` : '');
+
+  try {
+    const resp = await fetchUrl(apiUrl, {
+      referer: 'https://cine.su/',
+      timeout: 10000,
+    });
+    if (resp.error || !resp.html || !resp.html.startsWith('#EXTM3U')) {
+      return { source: 'cine.su', embedUrl, status: 'no_streams', streams: [], latency_ms: Date.now() - start };
+    }
+    const streams = parseMasterPlaylist(resp.html, apiUrl);
+    return {
+      source: 'cine.su', embedUrl,
+      status: streams.length > 0 ? 'working' : 'no_streams',
+      streams,
+      latency_ms: Date.now() - start,
+    };
+  } catch (err) {
+    return { source: 'cine.su', embedUrl, status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
 
 /**
  * vaplayer.ru
@@ -608,16 +698,225 @@ async function scrapeVixsrc({ tmdbId, type, season, episode }) {
   }
 }
 
+/**
+ * vidzee_api — Encrypted HTTP API (AES-CBC decrypt).
+ * Chain: core.vidzee.wtf/api-key → derive key → player.vidzee.wtf/api/server → decrypt links
+ */
+const webcrypto = require('crypto').webcrypto;
+
+function vidzeeBase64ToBytes(str) {
+  return new Uint8Array(Buffer.from(str.replace(/\s+/g, ''), 'base64'));
+}
+
+async function vidzeeDeriveKey(apiKey) {
+  if (!apiKey) return '';
+  const t = vidzeeBase64ToBytes(apiKey);
+  if (t.length <= 28) return '';
+  const iv = t.slice(0, 12);
+  const salt = t.slice(12, 28);
+  const cipherData = t.slice(28);
+  const combined = new Uint8Array(cipherData.length + salt.length);
+  combined.set(cipherData, 0);
+  combined.set(salt, cipherData.length);
+  const gcmKey = await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode('4f2a9c7d1e8b3a6f0d5c2e9a7b1f4d8c'));
+  const importKey = await webcrypto.subtle.importKey('raw', gcmKey, { name: 'AES-GCM' }, false, ['decrypt']);
+  const decrypted = await webcrypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, importKey, combined);
+  return new TextDecoder().decode(decrypted);
+}
+
+function vidzeeGetKeyBytes(key) {
+  const encoded = new TextEncoder().encode(key);
+  const result = new Uint8Array(32);
+  result.set(encoded.slice(0, 32));
+  return result;
+}
+
+async function vidzeeAesDecrypt(encryptedData, decryptionKey) {
+  if (!encryptedData || !decryptionKey) return '';
+  const decoded = Buffer.from(encryptedData, 'base64').toString('utf-8');
+  const [ivB64, cipherB64] = decoded.split(':');
+  if (!ivB64 || !cipherB64) return '';
+  const iv = new Uint8Array(Buffer.from(ivB64, 'base64'));
+  const cipherBytes = new Uint8Array(Buffer.from(cipherB64, 'base64'));
+  const keyBytes = vidzeeGetKeyBytes(decryptionKey);
+  const cryptoKey = await webcrypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['decrypt']);
+  const decrypted = await webcrypto.subtle.decrypt({ name: 'AES-CBC', iv }, cryptoKey, cipherBytes);
+  return new TextDecoder().decode(decrypted);
+}
+
+async function scrapeVidzee({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  try {
+    const keyResp = await fetchUrl('https://core.vidzee.wtf/api-key', { timeout: 10000 });
+    if (keyResp.error || !keyResp.html) return { source: 'vidzee_api', embedUrl: '', status: 'no_streams', streams: [], latency_ms: Date.now() - start };
+    const apiKey = typeof keyResp.html === 'string' ? keyResp.html : String(keyResp.html);
+    const decKey = await vidzeeDeriveKey(apiKey);
+    if (!decKey) return { source: 'vidzee_api', embedUrl: '', status: 'error', error: 'Key derivation failed', streams: [], latency_ms: Date.now() - start };
+
+    const serverPromises = [];
+    for (let sr = 0; sr < 14; sr++) {
+      let url = `https://player.vidzee.wtf/api/server?id=${tmdbId}&sr=${sr}`;
+      if (type === 'tv') url += `&ss=${season || 1}&ep=${episode || 1}`;
+      serverPromises.push(fetchUrl(url, { referer: 'https://player.vidzee.wtf/', timeout: 8000, responseType: 'json' }));
+    }
+    const results = await Promise.allSettled(serverPromises);
+    const streams = [];
+    const subs = [];
+    const seen = new Set();
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue;
+      const d = r.value.html;
+      if (!d?.url?.length) continue;
+      for (const item of d.url) {
+        try {
+          const url = await vidzeeAesDecrypt(item.link, decKey);
+          if (url && url.startsWith('http') && !seen.has(url)) { seen.add(url); streams.push({ url, type: 'hls', quality: '', resolution: '' }); }
+        } catch (_) {}
+      }
+      if (d.tracks) {
+        for (const t of d.tracks) {
+          if (t.url && t.url.startsWith('http')) subs.push({ url: t.url, lang: t.lang || 'unknown', type: 'vtt' });
+        }
+      }
+    }
+    return { source: 'vidzee_api', embedUrl: `https://player.vidzee.wtf/embed/${type}/${tmdbId}`, status: streams.length > 0 ? 'working' : 'no_streams', streams, subtitles: subs.length > 0 ? subs : undefined, latency_ms: Date.now() - start };
+  } catch (err) {
+    return { source: 'vidzee_api', embedUrl: '', status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
+
+/**
+ * vidrock_api — Encrypted HTTP API (AES-CBC encrypt itemId).
+ */
+const VIDROCK_PASSPHRASE = 'x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9';
+
+async function vidrockEncrypt(itemId) {
+  const enc = new TextEncoder();
+  const keyData = enc.encode(VIDROCK_PASSPHRASE);
+  const iv = enc.encode(VIDROCK_PASSPHRASE.substring(0, 16));
+  const key = await webcrypto.subtle.importKey('raw', keyData, { name: 'AES-CBC' }, false, ['encrypt']);
+  const encrypted = await webcrypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, enc.encode(itemId));
+  const arr = new Uint8Array(encrypted);
+  let bin = '';
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  return Buffer.from(bin, 'binary').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function scrapeVidrock({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  try {
+    const itemId = type === 'tv' ? `${tmdbId}_${season || 1}_${episode || 1}` : String(tmdbId);
+    const encryptedId = await vidrockEncrypt(itemId);
+    const apiUrl = `https://vidrock.net/api/${type}/${encryptedId}`;
+    const resp = await fetchUrl(apiUrl, { referer: 'https://vidrock.net/', timeout: 10000, responseType: 'json' });
+    if (resp.error || !resp.html) return { source: 'vidrock_api', embedUrl: '', status: 'no_streams', streams: [], latency_ms: Date.now() - start };
+    const streams = [];
+    const seen = new Set();
+    for (const [srv, sd] of Object.entries(resp.html)) {
+      if (!sd?.url) continue;
+      if (!seen.has(sd.url)) { seen.add(sd.url); streams.push({ url: sd.url, type: sd.type === 'mp4' ? 'mp4' : 'hls', quality: '', resolution: '', server: srv }); }
+    }
+    // Fetch subtitles
+    const subs = [];
+    const subUrl = type === 'tv' ? `https://sub.vdrk.site/v2/tv/${tmdbId}/${season || 1}/${episode || 1}` : `https://sub.vdrk.site/v2/movie/${tmdbId}`;
+    const subResp = await fetchUrl(subUrl, { referer: 'https://vidrock.net/', timeout: 5000, responseType: 'json' });
+    if (!subResp.error && Array.isArray(subResp.html)) {
+      for (const s of subResp.html) { if (s?.file) subs.push({ url: s.file, lang: s.label || 'unknown', type: s.file.endsWith('.vtt') ? 'vtt' : 'srt' }); }
+    }
+    return { source: 'vidrock_api', embedUrl: `https://vidrock.net/${type}/${tmdbId}`, status: streams.length > 0 ? 'working' : 'no_streams', streams, subtitles: subs.length > 0 ? subs : undefined, latency_ms: Date.now() - start };
+  } catch (err) {
+    return { source: 'vidrock_api', embedUrl: '', status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
+
+/**
+ * vidnest_api — Multi-server custom-base64 encrypted API.
+ */
+const VIDNEST_ALPHABET = 'RB0fpH8ZEyVLkv7c2i6MAJ5u3IKFDxlS1NTsnGaqmXYdUrtzjwObCgQP94hoeW+/=';
+const VIDNEST_REVERSE = {};
+for (let i = 0; i < VIDNEST_ALPHABET.length; i++) VIDNEST_REVERSE[VIDNEST_ALPHABET[i]] = i;
+
+function decodeVidnest(input) {
+  if (!input) throw new Error('Invalid');
+  let p = input;
+  const m = p.length % 4;
+  if (m) p += '='.repeat(4 - m);
+  const bytes = [];
+  for (let i = 0; i < p.length; i += 4) {
+    const c = p.slice(i, i + 4);
+    const c0 = VIDNEST_REVERSE[c[0]] ?? 64, c1 = VIDNEST_REVERSE[c[1]] ?? 64;
+    const c2 = c[2] === '=' ? 64 : (VIDNEST_REVERSE[c[2]] ?? 64);
+    const c3 = c[3] === '=' ? 64 : (VIDNEST_REVERSE[c[3]] ?? 64);
+    bytes.push(((c0 << 2) | (c1 >> 4)) & 0xff);
+    if (c2 !== 64) bytes.push((((c1 & 0x0f) << 4) | (c2 >> 2)) & 0xff);
+    if (c3 !== 64) bytes.push((((c2 & 0x03) << 6) | c3) & 0xff);
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+
+const VIDNEST_SERVERS = ['moviebox', 'allmovies', 'purstream', 'hollymoviehd', 'vidlink', 'onehd'];
+
+async function scrapeVidnest({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  try {
+    const promises = VIDNEST_SERVERS.map(s => {
+      const url = type === 'movie'
+        ? `https://new.vidnest.fun/${s}/movie/${tmdbId}`
+        : `https://new.vidnest.fun/${s}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
+      return fetchUrl(url, { referer: 'https://vidnest.fun/', timeout: 8000, responseType: 'json' }).then(r => ({ s, r }));
+    });
+    const results = await Promise.allSettled(promises);
+    const streams = [];
+    const subs = [];
+    const seen = new Set();
+    for (const settled of results) {
+      if (settled.status !== 'fulfilled') continue;
+      const { s: server, r: resp } = settled.value;
+      if (resp.error || !resp.html) continue;
+      const d = resp.html;
+      let data;
+      if (d.encrypted && d.data) { try { data = JSON.parse(decodeVidnest(d.data)); } catch (_) { continue; } }
+      else if (!d.encrypted && d.data) data = d.data;
+      else continue;
+      try {
+        if (server === 'moviebox' && data.url) {
+          for (const u of data.url) { if (u.link && u.link.startsWith('http') && !seen.has(u.link)) { seen.add(u.link); streams.push({ url: u.link, type: u.type === 'mp4' ? 'mp4' : 'hls', quality: u.resolution ? u.resolution + 'p' : '', resolution: '' }); } }
+        } else if (server === 'allmovies' && data.streams) {
+          for (const st of data.streams) { if (st.url && st.url.startsWith('http') && !seen.has(st.url)) { seen.add(st.url); streams.push({ url: st.url, type: st.type === 'mp4' ? 'mp4' : 'hls', quality: '', resolution: '' }); } }
+        } else if (server === 'purstream' && data.sources) {
+          for (const src of data.sources) { if (src.url && src.url.startsWith('http') && !seen.has(src.url)) { seen.add(src.url); const q = src.name?.match(/(\d+p)/); streams.push({ url: src.url, type: 'hls', quality: q?.[1] || '', resolution: '' }); } }
+        } else if (server === 'hollymoviehd' && data.sources) {
+          for (const src of data.sources) { if (src.file && src.file.startsWith('http') && !seen.has(src.file)) { seen.add(src.file); streams.push({ url: src.file, type: src.type === 'mp4' ? 'mp4' : 'hls', quality: src.label || '', resolution: '' }); } }
+        } else if (server === 'vidlink' && data?.data?.stream?.playlist) {
+          const pl = data.data.stream.playlist;
+          if (pl.startsWith('http') && !seen.has(pl)) { seen.add(pl); streams.push({ url: pl, type: 'hls', quality: '', resolution: '' }); }
+          if (data.data.stream.captions) { for (const cap of data.data.stream.captions) { if (cap.url && cap.url.startsWith('http')) subs.push({ url: cap.url, lang: cap.language || 'unknown', type: 'vtt' }); } }
+        } else if (server === 'onehd' && data.url) {
+          if (data.url.startsWith('http') && !seen.has(data.url)) { seen.add(data.url); streams.push({ url: data.url, type: 'hls', quality: '', resolution: '' }); }
+          if (data.subtitles) { for (const sub of data.subtitles) { if (sub.url && sub.url.startsWith('http')) subs.push({ url: sub.url, lang: sub.lang || 'unknown', type: 'vtt' }); } }
+        }
+      } catch (_) {}
+    }
+    return { source: 'vidnest_api', embedUrl: `https://vidnest.fun/${type}/${tmdbId}`, status: streams.length > 0 ? 'working' : 'no_streams', streams, subtitles: subs.length > 0 ? subs : undefined, latency_ms: Date.now() - start };
+  } catch (err) {
+    return { source: 'vidnest_api', embedUrl: '', status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Section 4: Aggregator
 // ──────────────────────────────────────────────────────────────────────────────
 
 const ALL_SOURCES = [
+  { name: 'cine.su',        scrape: scrapeCineSu },
   { name: 'vaplayer.ru',    scrape: scrapeVaplayer },
   { name: 'ezvidapi.com',   scrape: scrapeEzvidapi },
   { name: 'vidlink.pro',    scrape: scrapeVidlink },
   { name: 'videasy.net',    scrape: scrapeVideasy },
   { name: 'vixsrc.to',      scrape: scrapeVixsrc },
+  { name: 'vidzee_api',     scrape: scrapeVidzee },
+  { name: 'vidrock_api',    scrape: scrapeVidrock },
+  { name: 'vidnest_api',    scrape: scrapeVidnest },
 ];
 
 const SOURCE_TIMEOUT = 30000;
@@ -718,16 +1017,35 @@ function parseArgs() {
 
 async function main() {
   const args = parseArgs();
-  const tmdbId = args.tmdb || args.id;
-  const type = args.type || 'movie';
+  let tmdbId = args.tmdb || args.id;
+  let type = args.type || 'movie';
   const season = args.season || 1;
   const episode = args.episode || 1;
+
+  // IMDB ID support ─ convert tt... to TMDB ID (auto-detects movie vs TV)
+  if (args.imdb) {
+    try {
+      const lookup = await imdbToTmdb(args.imdb);
+      tmdbId = lookup.tmdbId;
+      type = lookup.type;
+      console.warn(`[IMDB] ${args.imdb} → TMDB ${tmdbId} (${type}: ${lookup.title})`);
+    } catch (e) {
+      console.log(JSON.stringify({ success: false, error: `IMDB lookup failed: ${e.message}` }, null, 2));
+      process.exit(1);
+    }
+  }
 
   if (!tmdbId) {
     const usage = {
       success: false,
-      error: 'Usage: node raw-api.js --tmdb=24428 [--type=movie|tv] [--season=N] [--episode=N]',
-      pipe_from_github: 'curl -s https://raw.githubusercontent.com/sunriseve/multisource-api/main/raw-api.js | node - --tmdb=24428',
+      error: 'Usage: node raw-api.js --tmdb=24428 OR node raw-api.js --imdb=tt0848228',
+      examples: {
+        movie_tmdb: 'node raw-api.js --tmdb=24428',
+        movie_imdb: 'node raw-api.js --imdb=tt0848228',
+        tv_tmdb: 'node raw-api.js --tmdb=1399 --type=tv --season=1 --episode=1',
+        tv_imdb: 'node raw-api.js --imdb=tt0903747 --season=1 --episode=1',
+        pipe: 'curl -s https://raw.githubusercontent.com/sunriseve/multisource-api/main/raw-api.js | node - --imdb=tt0848228',
+      },
     };
     console.log(JSON.stringify(usage, null, 2));
     process.exit(1);

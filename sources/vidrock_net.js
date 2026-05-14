@@ -1,23 +1,17 @@
 /**
- * vidrock.net — Embed player page.
- * Status: embed (requires browser JS to render player)
+ * vidrock.net — Video streaming API (Next.js app).
+ * Status: embed (JS-rendered). Has /api/movie/:id endpoint but returns Forbidden.
+ * Try with /movie/:id direct path.
  */
-const { fetchUrl } = require('../utils/fetcher');
-
+const { scrapeEmbedSource } = require('../utils/embedScraper');
 const BASE = 'https://vidrock.net';
-
 async function scrapeSource({ tmdbId, type, season, episode }) {
   const embedUrl = type === 'movie'
     ? `${BASE}/movie/${tmdbId}`
     : `${BASE}/tv/${tmdbId}/${season}/${episode}`;
-  const { html, status } = await fetchUrl(embedUrl, { referer: BASE, timeout: 8000 });
-  const streams = [];
-  if (html && status >= 200 && status < 400) {
-    const m3u8s = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/g);
-    if (m3u8s) {
-      for (const url of m3u8s) streams.push({ url: url.replace(/['")>]+$/g, ''), type: 'hls', quality: '' });
-    }
-  }
-  return { source: 'vidrock.net', embedUrl, status: streams.length > 0 ? 'working' : 'embed', streams };
+  const apiUrl = type === 'movie'
+    ? `${BASE}/api/movie/${tmdbId}`
+    : `${BASE}/api/tv/${tmdbId}/${season}/${episode}`;
+  return await scrapeEmbedSource({ name: 'vidrock.net', embedUrl, apiUrl, referer: BASE });
 }
 module.exports = { scrapeSource };

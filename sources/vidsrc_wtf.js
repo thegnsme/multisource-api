@@ -1,41 +1,25 @@
 /**
- * vidsrc.wtf — Next.js API player (4 API variants, client-side rendered).
- * 
- * API patterns:
- *   /api/1/movie/?id={tmdbId}
- *   /api/2/movie/?id={tmdbId}
- *   /api/3/movie/?id={tmdbId}
- *   /api/4/movie/?id={tmdbId}
- *
- * Status: embed (Next.js SPA, requires browser JS)
+ * vidsrc.wtf — Has 4 API variants + embed player.
+ * Status: embed (JS-rendered, APIs may work)
  */
-const { fetchUrl } = require('../utils/fetcher');
-
+const { scrapeEmbedSource } = require('../utils/embedScraper');
 const BASE = 'https://vidsrc.wtf';
-const API_VERSIONS = [1, 2, 3, 4];
-
 async function scrapeSource({ tmdbId, type, season, episode }) {
   const embedUrl = type === 'movie'
-    ? `${BASE}/api/1/movie/?id=${tmdbId}`
-    : `${BASE}/api/1/tv/?id=${tmdbId}&s=${season}&e=${episode}`;
-
-  // Try all API variants for movies
-  for (const ver of API_VERSIONS) {
-    try {
-      const apiUrl = type === 'movie'
-        ? `${BASE}/api/${ver}/movie/?id=${tmdbId}`
-        : `${BASE}/api/${ver}/tv/?id=${tmdbId}&s=${season}&e=${episode}`;
-      const { html, status } = await fetchUrl(apiUrl, { referer: BASE, timeout: 6000 });
-      if (html && status >= 200 && status < 400) {
-        const m3u8s = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/g);
-        if (m3u8s && m3u8s.length > 0) {
-          const streams = m3u8s.map(url => ({ url: url.replace(/['")>]+$/g, ''), type: 'hls', quality: '' }));
-          return { source: `vidsrc.wtf (api/${ver})`, embedUrl, status: 'working', streams };
-        }
-      }
-    } catch (_) { /* try next variant */ }
+    ? `${BASE}/embed/movie/${tmdbId}`
+    : `${BASE}/embed/tv/${tmdbId}/${season}/${episode}`;
+  // Try 4 API variants
+  const apiUrls = [];
+  for (const v of [1, 2, 3, 4]) {
+    apiUrls.push(type === 'movie'
+      ? `${BASE}/api/${v}/movie/?id=${tmdbId}&color=ffffff`
+      : `${BASE}/api/${v}/tv/?id=${tmdbId}&s=${season}&e=${episode}&color=ffffff`);
   }
-
-  return { source: 'vidsrc.wtf', embedUrl, status: 'embed', streams: [] };
+  // Try each API variant
+  for (const apiUrl of apiUrls) {
+    const result = await scrapeEmbedSource({ name: 'vidsrc.wtf', embedUrl, apiUrl, referer: BASE });
+    if (result.streams.length > 0) return result;
+  }
+  return await scrapeEmbedSource({ name: 'vidsrc.wtf', embedUrl, referer: BASE });
 }
 module.exports = { scrapeSource };
