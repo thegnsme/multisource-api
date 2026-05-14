@@ -25,6 +25,8 @@
  *   • vidlink.pro      — enc-dec.app + vidlink.pro API → m3u8 with subtitles
  *   • videasy.net      — api.videasy.net + enc-dec.app decrypt → m3u8 with subtitles
  *   • vixsrc.to        — vixsrc.to API → embed page → m3u8
+ *   • flicky_api       — gate.flicky.host proxy → direct HLS (v13/v14/v15, up to 4K)
+ *   • 02movie_api      — 02moviedownloader.site encrypted API → MP4 + subtitles
  *
  * IMDB ID support: use --imdb=tt0848228 instead of --tmdb=24428.
  * Auto-detects movie vs TV show from TMDB response.
@@ -903,6 +905,103 @@ async function scrapeVidnest({ tmdbId, type, season, episode }) {
   }
 }
 
+// ── Flicky source (v13/v14/v15) ──────────────────────────────────────────────
+
+async function scrapeFlicky({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  const isTv = type === 'tv';
+  const pathSuffix = isTv ? `/${season || 1}/${episode || 1}` : '';
+  const versions = [
+    { ver: 'v13', label: 'Flicky v13 (VidZee)' },
+    { ver: 'v14', label: 'Flicky v14 (VidZee)' },
+    { ver: 'v15', label: 'Flicky v15 (Senpai)' },
+  ];
+  try {
+    const results = await Promise.allSettled(versions.map(v =>
+      fetchUrl(`https://gate.flicky.host/${v.ver}/${isTv ? 'tv' : 'movie'}/${tmdbId}${isTv ? pathSuffix : ''}`, { timeout: 10000, responseType: 'json' }).then(r => ({ ...r, ver: v }))
+    ));
+    const streams = []; const subs = []; const seen = new Set();
+    for (const settled of results) {
+      if (settled.status !== 'fulfilled') continue;
+      const { html, error, ver } = settled.value;
+      if (error || !html) continue;
+      // v13/v14 format: { code: 0, data: { downloads: [...], captions: [...] } }
+      if (html.code === 0 && html.data?.downloads) {
+        for (const d of html.data.downloads) {
+          if (d.url && d.url.startsWith('http') && !seen.has(d.url)) { seen.add(d.url); streams.push({ url: d.url, type: 'hls', quality: d.resolution ? d.resolution + 'p' : '', resolution: '', server: ver.label }); }
+        }
+        if (html.data.captions) { for (const cap of html.data.captions) { if (cap.url && cap.url.startsWith('http')) subs.push({ url: cap.url, lang: cap.lan || 'unknown', label: cap.lanName || '', type: cap.url.endsWith('.vtt') ? 'vtt' : 'srt' }); } }
+      }
+      // v15 format: { stream: "https://..." } or { stream: { url: "..." } }
+      if (html.stream) {
+        const url = typeof html.stream === 'string' ? html.stream : html.stream?.url || '';
+        if (url && url.startsWith('http') && !seen.has(url)) { seen.add(url); streams.push({ url, type: 'hls', quality: '', resolution: '', server: ver.label }); }
+      }
+    }
+    const seenSubs = new Set(); const uniqueSubs = subs.filter(s => { if (seenSubs.has(s.url)) return false; seenSubs.add(s.url); return true; });
+    return { source: 'flicky_api', embedUrl: `https://gate.flicky.host/${isTv ? `tv/${tmdbId}${pathSuffix}` : `movie/${tmdbId}`}`, status: streams.length > 0 ? 'working' : 'no_streams', streams, ...(uniqueSubs.length > 0 ? { subtitles: uniqueSubs } : {}), latency_ms: Date.now() - start };
+  } catch (err) {
+    return { source: 'flicky_api', embedUrl: '', status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
+
+// ── 02MovieDownloader source ─────────────────────────────────────────────────
+
+async function scrape02Movie({ tmdbId, type, season, episode }) {
+  const start = Date.now();
+  const isTv = type === 'tv';
+  const path = isTv ? `/tv/${tmdbId}/${season || 1}/${episode || 1}` : `/movie/${tmdbId}`;
+  const url = `https://02moviedownloader.site/api/download${path}`;
+  const ref = url;
+  try {
+    // Step 1: Get session token
+    const tokenResp = await fetchUrl('https://02moviedownloader.site/api/verify-robot', { method: 'POST', body: '{}', headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': '*/*', 'Origin': 'https://02moviedownloader.site', 'Referer': ref }, responseType: 'json', timeout: 10000 });
+    if (tokenResp.error || !tokenResp.html?.token) return { source: '02movie_api', embedUrl: url, status: 'error', error: 'Token fetch failed', streams: [], latency_ms: Date.now() - start };
+    const token = tokenResp.html.token;
+
+    // Step 2: Fetch movie data
+    const movieResp = await fetchUrl(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'x-session-token': token, 'Referer': ref }, responseType: 'json', timeout: 15000 });
+    if (movieResp.error || !movieResp.html) return { source: '02movie_api', embedUrl: url, status: 'error', error: 'Movie fetch failed', streams: [], latency_ms: Date.now() - start };
+    const raw = movieResp.html;
+
+    // Step 3: Decrypt if encrypted
+    let data = raw;
+    if (raw.encrypted === true && raw.data) {
+      const parts = raw.data.split(':');
+      if (parts.length === 2) {
+        const iv = new Uint8Array(Buffer.from(parts[0], 'base64'));
+        const ct = new Uint8Array(Buffer.from(parts[1], 'base64'));
+        const key = new Uint8Array(require('crypto').createHash('sha256').update(token).digest());
+        const decipher = require('crypto').createDecipheriv('aes-256-cbc', key, iv);
+        const dec = Buffer.concat([decipher.update(ct), decipher.final()]);
+        data = JSON.parse(dec.toString('utf8'));
+      }
+    }
+
+    // Step 4: Parse streams
+    const streams = []; const subs = []; const seen = new Set();
+    if (data.data?.downloadData?.data?.downloads) {
+      for (const d of data.data.downloadData.data.downloads) {
+        if (d.url && d.url.startsWith('http') && !seen.has(d.url)) { seen.add(d.url); streams.push({ url: d.url, type: 'mp4', quality: d.resolution ? d.resolution + 'p' : '', resolution: '' }); }
+      }
+    }
+    if (data.externalStreams) {
+      for (const s of data.externalStreams) {
+        if (s.url.includes('111477.xyz')) continue;
+        if (s.url && s.url.startsWith('http') && !seen.has(s.url)) { seen.add(s.url); const q = s.quality?.match(/(\d+)/); streams.push({ url: s.url, type: s.url.includes('.mkv') ? 'mkv' : 'mp4', quality: q ? q[1] + 'p' : '' }); }
+      }
+    }
+    if (data.data?.downloadData?.data?.captions) {
+      for (const cap of data.data.downloadData.data.captions) {
+        if (cap.url && cap.url.startsWith('http')) subs.push({ url: cap.url, lang: cap.lan || 'unknown', label: cap.lanName || '', type: cap.url.endsWith('.srt') ? 'srt' : 'vtt' });
+      }
+    }
+    return { source: '02movie_api', embedUrl: url, status: streams.length > 0 ? 'working' : 'no_streams', streams, ...(subs.length > 0 ? { subtitles: subs } : {}), latency_ms: Date.now() - start };
+  } catch (err) {
+    return { source: '02movie_api', embedUrl: '', status: 'error', error: err.message, streams: [], latency_ms: Date.now() - start };
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Section 4: Aggregator
 // ──────────────────────────────────────────────────────────────────────────────
@@ -917,10 +1016,12 @@ const ALL_SOURCES = [
   { name: 'vidzee_api',     scrape: scrapeVidzee },
   { name: 'vidrock_api',    scrape: scrapeVidrock },
   { name: 'vidnest_api',    scrape: scrapeVidnest },
+  { name: 'flicky_api',     scrape: scrapeFlicky },
+  { name: '02movie_api',    scrape: scrape02Movie },
 ];
 
 const SOURCE_TIMEOUT = 30000;
-const SOURCE_COUNT = ALL_SOURCES.length;
+const SOURCE_COUNT = ALL_SOURCES.length; // 11 sources
 
 /**
  * Run all sources in parallel and aggregate results.
