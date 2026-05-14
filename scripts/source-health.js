@@ -96,11 +96,20 @@ function generateReport(results, elapsed) {
   const failedSources = sources.filter(s => results[s].overall === 'failed').length;
   const erroredSources = sources.filter(s => results[s].overall === 'load_error').length;
 
-  const now = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    const now = new Date();
+    const istDate = now.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    });
+    // Clean up format: "14-May-2026 02:25:05 PM IST"
+    const parts = istDate.split(', ');
+    const dateStr = parts.length === 2 ? `${parts[0]}-${parts[1]} IST` : `${istDate} IST`;
 
   let md = '';
   md += `# 📊 Source Health Report\n\n`;
-  md += `**Generated:** ${now}  \n`;
+  md += `**Generated:** ${dateStr}  \n`;
   md += `**Total Sources:** ${totalSources}  \n`;
   md += `**🟢 Working:** ${workingSources}  \n`;
   md += `**🔴 Not Working:** ${failedSources}  \n`;
@@ -165,7 +174,14 @@ function updateReadmeStatus(working, failed, total) {
     let readme = fs.readFileSync(readmePath, 'utf-8');
 
     const now = new Date();
-    const dateStr = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    const istDate = now.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    });
+    const istParts = istDate.split(', ');
+    const dateStr = istParts.length === 2 ? `${istParts[0]}-${istParts[1]} IST` : `${istDate} IST`;
     const workingLabel = working > 0 ? `🟢 **${working}** / ${total}` : '🔴 **0**';
     const statusIcon = working > 0 ? '✅' : '❌';
 

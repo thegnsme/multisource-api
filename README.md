@@ -12,7 +12,7 @@
 >
 > ✅ 🟢 **5** / 14 sources working
 >
-> 🕐 **Last checked:** 2026-05-14 03:41:02 UTC
+> 🕐 **Last checked:** 14-May-2026 02:26:58 PM IST
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
 <!-- HEALTH_CHECK_END -->
@@ -21,16 +21,31 @@
 
 ## 🚀 Quick Start
 
+### Zero-host mode (no install, no server, just curl + node)
+
+```bash
+curl -s https://raw.githubusercontent.com/sunriseve/multisource-api/main/raw-api.js \
+  | node - --tmdb=24428
+```
+
+### Full mode (with npm dependencies)
+
 ```bash
 npm install
 node api.js --tmdb=24428               # Movie
 node api.js --tmdb=1399 --type=tv --season=1 --episode=1  # TV
 ```
 
+### Single source (debug/testing)
+
+```bash
+node sources/vaplayer.js --tmdb=24428
+```
+
 Pipe through `jq` for pretty output:
 
 ```bash
-node api.js --tmdb=24428 | jq '.sources[] | select(.status=="working") | {source, streamCount: (.streams|length)}'
+node raw-api.js --tmdb=24428 | jq '.sources[] | select(.status=="working") | {source, streamCount: (.streams|length)}'
 ```
 
 ## 🌐 HTTP API Server
@@ -94,6 +109,48 @@ node api.js --tmdb=<TMDB_ID> [--type=movie|tv] [--season=N] [--episode=N]
 | `--season` | `1` | Season number (TV only) |
 | `--episode` | `1` | Episode number (TV only) |
 
+## 🔥 Zero-Host Mode: `raw-api.js`
+
+**No npm install needed. No server. No accounts. Works from a raw GitHub URL.**
+
+`raw-api.js` is a **100% self-contained** version of the API using only Node.js built-in modules (no axios, no express, no npm dependencies).
+
+### Pipe from GitHub (no clone needed)
+
+```bash
+curl -s https://raw.githubusercontent.com/sunriseve/multisource-api/main/raw-api.js \
+  | node - --tmdb=24428
+```
+
+### Run locally (after clone)
+
+```bash
+node raw-api.js --tmdb=24428
+node raw-api.js --tmdb=1399 --type=tv --season=1 --episode=1
+```
+
+### Run a single source directly
+
+Every source file in `sources/` is also a standalone CLI:
+
+```bash
+node sources/vaplayer.js --tmdb=24428
+node sources/vidlink_pro.js --tmdb=24428
+```
+
+### Import as a module
+
+```js
+const { scrapeAll } = require('./raw-api');
+const result = await scrapeAll(24428, 'movie');
+```
+
+### What's included
+
+`raw-api.js` bundles the 5 working HTTP-based sources (vaplayer, ezvidapi, vidlink, videasy, vixsrc) — same aggregation logic, same JSON format. The other 9 embed sources are excluded (they need a browser engine).
+
+---
+
 ## 🗺 Source Map
 
 All 14 sources currently implemented, with their working status and capabilities.
@@ -131,7 +188,13 @@ All 14 sources currently implemented, with their working status and capabilities
 │  server.js   │────▶│  sources in   │────▶│  JSON API    │
 │  (Express)   │     │  parallel     │     │  (HTTP)      │
 └─────────────┘     └──────────────┘     └──────────────┘
-```
+
+┌──────────────┐
+│  raw-api.js   │────▶ JSON Output (stdout / pipe)
+│  (standalone) │      Zero deps. No npm install needed.
+│  Built-in     │      curl raw URL | node - --tmdb=24428
+│  http/https   │
+└──────────────┘
 
 Each source is a standalone file in `sources/` exporting `{ scrapeSource() }`. The aggregator auto-discovers them — **no registration needed**.
 

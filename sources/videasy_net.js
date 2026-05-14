@@ -130,3 +130,21 @@ function qualityToResolution(quality) {
 }
 
 module.exports = { scrapeSource };
+
+// ── Standalone CLI ───────────────────────────────────────────────────────────
+if (require.main === module || module.id === '[stdin]') {
+  (async () => {
+    const args = {};
+    process.argv.slice(2).forEach(a => {
+      const [k, v] = a.replace(/^--/, '').split('=');
+      args[k] = v || true;
+    });
+    const result = await scrapeSource({
+      tmdbId: parseInt(args.tmdb || args.id || '24428'),
+      type: args.type || 'movie',
+      season: parseInt(args.season || '1'),
+      episode: parseInt(args.episode || '1'),
+    });
+    console.log(JSON.stringify(result, null, 2));
+  })();
+}
