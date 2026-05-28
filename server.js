@@ -1,299 +1,127 @@
 #!/usr/bin/env node
 /**
- * MultiSource API — HTTP Server
+ * HTTP API Server — wraps the source aggregator.
  *
  * Endpoints:
- *   GET /api/health           — Health check
- *   GET /api/sources          — List all available sources
- *   GET /api/movie/:tmdbId    — Get streams for a movie
- *   GET /api/tv/:tmdbId       — Get streams for a TV episode (?season=N&episode=N)
- *
- * Usage:
- *   npm start
- *   curl http://localhost:3000/api/movie/24428
+ *   GET /api/health          → server health
+ *   GET /api/sources         → list all sources
+ *   GET /api/movie/:tmdbId   → streams for a movie
+ *   GET /api/tv/:tmdbId      → streams for a TV episode (?season=1&episode=1)
+ *   GET /api/by-imdb/:id     → auto-detect movie/TV from IMDB ID
  */
 
-const express = require('express');
-const { aggregateAll, sourceCount } = require('./sources');
-const { imdbToTmdb } = require('./utils/tmdb-lookup');
+const express = require("express");
+const { aggregateAll, listSources, sourceCount } = require("./sources");
+const { imdbToTmdb } = require("./utils/tmdb-lookup");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const NAME = 'MultiSource API';
-const VERSION = '2.0.0';
 
-// ── Middleware ──────────────────────────────────────────────────────────────
-
-// CORS — allow any origin in dev, can be locked down via env
+// CORS
 app.use((req, res, next) => {
-  const origin = process.env.CORS_ORIGIN || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
+	res.setHeader("Access-Control-Allow-Origin", "*");
+	res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+	if (req.method === "OPTIONS") return res.sendStatus(204);
+	next();
 });
 
-// JSON body parser (for future POST endpoints)
-app.use(express.json());
+// ── Health ──────────────────────────────────────────────────────────────────
 
-// Request logging
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${ms}ms)`);
-  });
-  next();
+app.get("/api/health", (req, res) => {
+	res.json({
+		ok: true,
+		sources: sourceCount,
+		uptime: Math.floor(process.uptime()),
+		memory: Math.floor(process.memoryUsage().rss / 1024 / 1024) + "MB",
+	});
 });
 
-// Cache control — short TTL for stream data (30s), longer for static
-app.use('/api/health', (req, res, next) => {
-  res.setHeader('Cache-Control', 'no-cache');
-  next();
-});
-app.use('/api', (req, res, next) => {
-  // Stream data changes infrequently per request — allow 30s CDN cache
-  res.setHeader('Cache-Control', 'public, max-age=30');
-  next();
+// ── Sources ─────────────────────────────────────────────────────────────────
+
+app.get("/api/sources", (req, res) => {
+	res.json({ sources: listSources() });
 });
 
-// ── Validation helper ──────────────────────────────────────────────────────
+// ── Movie ───────────────────────────────────────────────────────────────────
 
-function validateTmdbId(tmdbId) {
-  const num = parseInt(tmdbId, 10);
-  if (!tmdbId || isNaN(num) || num <= 0) {
-    return { valid: false, error: 'Invalid tmdbId — must be a positive integer' };
-  }
-  return { valid: true, id: num };
-}
+app.get("/api/movie/:tmdbId", async (req, res) => {
+	const id = parseInt(req.params.tmdbId);
+	if (!id || id <= 0) return res.status(400).json({ error: "Invalid TMDB ID" });
 
-function validateTvParams(season, episode) {
-  const s = parseInt(season, 10);
-  const e = parseInt(episode, 10);
-  if (season !== undefined && (isNaN(s) || s < 1)) {
-    return { valid: false, error: 'Invalid season — must be a positive integer' };
-  }
-  if (episode !== undefined && (isNaN(e) || e < 1)) {
-    return { valid: false, error: 'Invalid episode — must be a positive integer' };
-  }
-  return { valid: true, season: s || 1, episode: e || 1 };
-}
-
-// ── Error response helper ──────────────────────────────────────────────────
-
-function errorResponse(res, status, message, details = null) {
-  const body = { success: false, error: message };
-  if (details) body.details = details;
-  return res.status(status).json(body);
-}
-
-// ── Routes ─────────────────────────────────────────────────────────────────
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    name: NAME,
-    version: VERSION,
-    uptime: process.uptime(),
-    sourcesLoaded: sourceCount,
-    memoryUsage: process.memoryUsage().rss,
-    timestamp: new Date().toISOString(),
-  });
+	try {
+		res.json(await aggregateAll(id, "movie"));
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
 });
 
-// List available sources
-app.get('/api/sources', async (req, res) => {
-  // Dynamic require all source files to get metadata
-  const fs = require('fs');
-  const path = require('path');
-  const sourceDir = __dirname + '/sources';
-  const files = fs.readdirSync(sourceDir)
-    .filter(f => f.endsWith('.js') && f !== 'index.js')
-    .sort();
+// ── TV ──────────────────────────────────────────────────────────────────────
 
-  const sourceList = [];
-  for (const file of files) {
-    const name = file.replace(/\.js$/, '').replace(/_/g, '.');
-    try {
-      const mod = require(path.join(sourceDir, file));
-      const hasScraper = typeof mod.scrapeSource === 'function';
-      sourceList.push({
-        name,
-        file,
-        hasScraper,
-        loaded: true,
-      });
-    } catch (e) {
-      sourceList.push({
-        name,
-        file,
-        hasScraper: false,
-        loaded: false,
-        loadError: e.message,
-      });
-    }
-  }
+app.get("/api/tv/:tmdbId", async (req, res) => {
+	const id = parseInt(req.params.tmdbId);
+	if (!id || id <= 0) return res.status(400).json({ error: "Invalid TMDB ID" });
 
-  const workingCount = sourceList.filter(s => s.hasScraper).length;
+	const season = parseInt(req.query.season) || 1;
+	const episode = parseInt(req.query.episode) || 1;
 
-  res.json({
-    success: true,
-    total: sourceList.length,
-    working: workingCount,
-    sources: sourceList,
-    timestamp: new Date().toISOString(),
-  });
+	try {
+		res.json(await aggregateAll(id, "tv", season, episode));
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
 });
 
-// Movie streams
-app.get('/api/movie/:tmdbId', async (req, res) => {
-  const validation = validateTmdbId(req.params.tmdbId);
-  if (!validation.valid) {
-    return errorResponse(res, 400, validation.error);
-  }
+// ── IMDB lookup ─────────────────────────────────────────────────────────────
 
-  try {
-    const result = await aggregateAll(validation.id, 'movie');
-    res.json(result);
-  } catch (err) {
-    console.error(`Error fetching movie ${validation.id}:`, err.message);
-    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
-  }
+app.get("/api/by-imdb/:imdbId", async (req, res) => {
+	const imdbId = req.params.imdbId;
+	if (!imdbId || !imdbId.startsWith("tt")) {
+		return res
+			.status(400)
+			.json({ error: "Invalid IMDB ID (must start with tt)" });
+	}
+
+	try {
+		const lookup = await imdbToTmdb(imdbId);
+		const season = parseInt(req.query.season) || 1;
+		const episode = parseInt(req.query.episode) || 1;
+		const result = await aggregateAll(
+			lookup.tmdbId,
+			lookup.type,
+			season,
+			episode,
+		);
+		result.imdb = {
+			id: imdbId,
+			tmdbId: lookup.tmdbId,
+			type: lookup.type,
+			title: lookup.title,
+		};
+		res.json(result);
+	} catch (err) {
+		res.status(500).json({ error: err.message });
+	}
 });
 
-// TV streams
-app.get('/api/tv/:tmdbId', async (req, res) => {
-  const idValidation = validateTmdbId(req.params.tmdbId);
-  if (!idValidation.valid) {
-    return errorResponse(res, 400, idValidation.error);
-  }
+// ── 404 ─────────────────────────────────────────────────────────────────────
 
-  const paramValidation = validateTvParams(req.query.season, req.query.episode);
-  if (!paramValidation.valid) {
-    return errorResponse(res, 400, paramValidation.error);
-  }
-
-  try {
-    const result = await aggregateAll(
-      idValidation.id,
-      'tv',
-      paramValidation.season,
-      paramValidation.episode
-    );
-    res.json(result);
-  } catch (err) {
-    console.error(`Error fetching TV ${idValidation.id} S${paramValidation.season}E${paramValidation.episode}:`, err.message);
-    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
-  }
-});
-
-// ── IMDB ID endpoints ────────────────────────────────────────────────────────
-
-function validateImdbId(imdbId) {
-  if (!imdbId || !imdbId.startsWith('tt')) {
-    return { valid: false, error: 'Invalid IMDB ID — must start with "tt" (e.g., tt0848228)' };
-  }
-  return { valid: true, id: imdbId };
-}
-
-// Auto-detect movie vs TV via IMDB ID
-app.get('/api/by-imdb/:imdbId', async (req, res) => {
-  const validation = validateImdbId(req.params.imdbId);
-  if (!validation.valid) {
-    return errorResponse(res, 400, validation.error);
-  }
-
-  try {
-    const lookup = await imdbToTmdb(validation.id);
-    const paramValidation = validateTvParams(req.query.season, req.query.episode);
-    const season = paramValidation.valid ? paramValidation.season : 1;
-    const episode = paramValidation.valid ? paramValidation.episode : 1;
-
-    const result = await aggregateAll(lookup.tmdbId, lookup.type, season, episode);
-    // Include IMDB lookup info in response
-    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: lookup.type, title: lookup.title };
-    res.json(result);
-  } catch (err) {
-    console.error(`Error fetching IMDB ${validation.id}:`, err.message);
-    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
-  }
-});
-
-// Movie via IMDB ID (force movie type)
-app.get('/api/movie/by-imdb/:imdbId', async (req, res) => {
-  const validation = validateImdbId(req.params.imdbId);
-  if (!validation.valid) {
-    return errorResponse(res, 400, validation.error);
-  }
-
-  try {
-    const lookup = await imdbToTmdb(validation.id);
-    if (lookup.type !== 'movie') {
-      // Force movie type anyway — user explicitly asked for movie
-    }
-    const result = await aggregateAll(lookup.tmdbId, 'movie');
-    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: 'movie (forced)', title: lookup.title };
-    res.json(result);
-  } catch (err) {
-    console.error(`Error fetching movie IMDB ${validation.id}:`, err.message);
-    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
-  }
-});
-
-// TV via IMDB ID (force TV type)
-app.get('/api/tv/by-imdb/:imdbId', async (req, res) => {
-  const validation = validateImdbId(req.params.imdbId);
-  if (!validation.valid) {
-    return errorResponse(res, 400, validation.error);
-  }
-
-  const paramValidation = validateTvParams(req.query.season, req.query.episode);
-  if (!paramValidation.valid) {
-    return errorResponse(res, 400, paramValidation.error);
-  }
-
-  try {
-    const lookup = await imdbToTmdb(validation.id);
-    const result = await aggregateAll(lookup.tmdbId, 'tv', paramValidation.season, paramValidation.episode);
-    result.imdbLookup = { imdbId: validation.id, tmdbId: lookup.tmdbId, type: 'tv (forced)', title: lookup.title };
-    res.json(result);
-  } catch (err) {
-    console.error(`Error fetching TV IMDB ${validation.id}:`, err.message);
-    errorResponse(res, 500, 'Failed to aggregate streams', err.message);
-  }
-});
-
-// 404 handler
 app.use((req, res) => {
-  errorResponse(res, 404, `Not found: ${req.method} ${req.path}`, {
-    availableEndpoints: [
-      'GET /api/health',
-      'GET /api/sources',
-      'GET /api/movie/:tmdbId',
-      'GET /api/tv/:tmdbId?season=1&episode=1',
-      'GET /api/by-imdb/:imdbId',
-      'GET /api/movie/by-imdb/:imdbId',
-      'GET /api/tv/by-imdb/:imdbId?season=1&episode=1',
-    ],
-  });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  errorResponse(res, 500, 'Internal server error');
+	res.status(404).json({
+		error: "Not found",
+		endpoints: [
+			"GET /api/health",
+			"GET /api/sources",
+			"GET /api/movie/:tmdbId",
+			"GET /api/tv/:tmdbId?season=1&episode=1",
+			"GET /api/by-imdb/:imdbId",
+		],
+	});
 });
 
 // ── Start ───────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`${NAME} v${VERSION} running on http://localhost:${PORT}`);
-  console.log(`  Health:  curl http://localhost:${PORT}/api/health`);
-  console.log(`  Sources: curl http://localhost:${PORT}/api/sources`);
-  console.log(`  Movie:   curl http://localhost:${PORT}/api/movie/24428`);
-  console.log(`  TV:      curl "http://localhost:${PORT}/api/tv/1396?season=1&episode=1"`);
-  console.log(`  IMDB:    curl http://localhost:${PORT}/api/by-imdb/tt0848228`);
-  console.log(`  IMDB TV: curl "http://localhost:${PORT}/api/tv/by-imdb/tt0903747?season=1&episode=1"`);
+	console.log(`MultiSource API on http://localhost:${PORT}`);
+	console.log(`  ${sourceCount} sources loaded`);
+	console.log(`  curl http://localhost:${PORT}/api/movie/24428`);
 });

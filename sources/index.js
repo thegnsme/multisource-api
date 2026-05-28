@@ -1,99 +1,142 @@
 /**
- * Sources Aggregator — loads all source modules, runs them in parallel,
- * and aggregates results into a single JSON response.
+ * Source Aggregator — auto-discovers and runs all sources in parallel.
+ *
+ * HOW IT WORKS:
+ *   1. Reads every .js file in this directory (except index.js and _template.js)
+ *   2. Requires each file — if it exports scrapeSource(), it's a source
+ *   3. Runs all sources in parallel with a per-source timeout
+ *   4. Returns aggregated results sorted by status
+ *
+ * ADD A SOURCE:
+ *   Drop any .js file in this folder that exports { scrapeSource }.
+ *   That's it. Nothing else to edit.
+ *
+ * REMOVE A SOURCE:
+ *   Delete the .js file. Done.
+ *
+ * EDIT A SOURCE:
+ *   Edit the .js file. Done.
  */
-const fs = require('fs');
-const path = require('path');
+
+const fs = require("fs");
+const path = require("path");
 
 const DIR = __dirname;
-const sourceFiles = fs.readdirSync(DIR)
-  .filter(f => f.endsWith('.js') && !['index.js'].includes(f))
-  .sort();
+const SOURCE_TIMEOUT = 30000; // 30s per source
 
-const sources = [];
-for (const file of sourceFiles) {
-  try {
-    const mod = require(path.join(DIR, file));
-    if (typeof mod.scrapeSource === 'function') {
-      sources.push({ name: file.replace(/\.js$/, '').replace(/_/g, '.'), scrape: mod.scrapeSource });
-    }
-  } catch (e) {
-    // skip
-  }
+// ── Auto-discover all source files ──────────────────────────────────────────
+
+function loadSources() {
+	return fs
+		.readdirSync(DIR)
+		.filter(
+			(f) => f.endsWith(".js") && f !== "index.js" && f !== "_template.js",
+		)
+		.sort()
+		.map((file) => {
+			const name = file.replace(/\.js$/, "").replace(/_/g, ".");
+			try {
+				const mod = require(path.join(DIR, file));
+				if (typeof mod.scrapeSource === "function") {
+					return { name, scrape: mod.scrapeSource };
+				}
+				return null;
+			} catch (e) {
+				return null;
+			}
+		})
+		.filter(Boolean);
 }
 
-async function aggregateAll(tmdbId, type = 'movie', season = 1, episode = 1) {
-  const params = { tmdbId: parseInt(tmdbId), type, season: parseInt(season), episode: parseInt(episode) };
-  const globalStart = Date.now();
-  const SOURCE_TIMEOUT = 30000; // 30s max per source
+const sources = loadSources();
 
-  // Run all sources in parallel with a global timeout per source
-  const tasks = sources.map(src => ({
-    name: src.name,
-    promisePromise: src.scrape(params).catch(err => ({
-      source: src.name,
-      status: 'error',
-      error: err.message,
-      streams: [],
-      latency_ms: Date.now() - globalStart,
-    })),
-  }));
+// ── Run all sources in parallel ─────────────────────────────────────────────
 
-  // Wrap each promise with a timeout
-  const wrapped = tasks.map(t => {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Source timeout')), SOURCE_TIMEOUT)
-    );
-    return Promise.race([t.promisePromise, timeoutPromise]).catch(err => ({
-      source: t.name,
-      status: 'error',
-      error: err.message || 'Source timeout',
-      streams: [],
-      latency_ms: Date.now() - globalStart,
-    }));
-  });
+async function aggregateAll(tmdbId, type = "movie", season = 1, episode = 1) {
+	const start = Date.now();
+	const params = {
+		tmdbId: parseInt(tmdbId),
+		type,
+		season: parseInt(season),
+		episode: parseInt(episode),
+	};
 
-  const settled = await Promise.allSettled(wrapped.map((p, i) => p.then(v => ({ index: i, value: v }))));
+	const results = await Promise.allSettled(
+		sources.map((src) =>
+			Promise.race([
+				src.scrape(params).catch((err) => ({
+					source: src.name,
+					status: "error",
+					error: err.message,
+					streams: [],
+					latency_ms: Date.now() - start,
+				})),
+				new Promise((_, reject) =>
+					setTimeout(() => reject(new Error("timeout")), SOURCE_TIMEOUT),
+				),
+			]).catch((err) => ({
+				source: src.name,
+				status: "error",
+				error: err.message || "timeout",
+				streams: [],
+				latency_ms: Date.now() - start,
+			})),
+		),
+	);
 
-  const sourcesOut = [];
-  let working = 0;
+	const sourcesOut = results.map((r, i) => {
+		if (r.status === "fulfilled") {
+			const val = r.value;
+			if (!val.source) val.source = sources[i].name;
+			return val;
+		}
+		return {
+			source: sources[i].name,
+			status: "error",
+			error: r.reason?.message || "failed",
+			streams: [],
+			latency_ms: Date.now() - start,
+		};
+	});
 
-  for (let i = 0; i < settled.length; i++) {
-    const r = settled[i];
-    const srcName = tasks[i].name;
-    if (r.status === 'fulfilled') {
-      const val = r.value.value;
-      if (!val.source || val.source === 'unknown') val.source = srcName;
-      sourcesOut.push(val);
-      if (val.status === 'working' && val.streams?.length > 0) working++;
-    } else {
-      sourcesOut.push({ source: srcName, status: 'error', error: r.reason?.message || 'Promise failed', streams: [], latency_ms: Date.now() - globalStart });
-    }
-  }
+	// Count working
+	const working = sourcesOut.filter(
+		(s) => s.status === "working" && s.streams?.length > 0,
+	);
 
-  // Count unique streams
-  const allStreams = sourcesOut.flatMap(s => s.streams || []);
-  const uniqueUrls = new Set();
-  allStreams.forEach(s => uniqueUrls.add(s.url));
+	// Count unique stream URLs
+	const allUrls = sourcesOut.flatMap((s) => s.streams || []).map((s) => s.url);
+	const uniqueUrls = new Set(allUrls);
 
-  // Sort sources: working first, then embed, then error
-  sourcesOut.sort((a, b) => {
-    const order = { working: 0, no_streams: 1, embed: 2, unavailable: 2, error: 3 };
-    return (order[a.status] || 4) - (order[b.status] || 4);
-  });
+	// Sort: working first, then no_streams, then embed, then error
+	const order = {
+		working: 0,
+		no_streams: 1,
+		embed: 2,
+		unavailable: 2,
+		error: 3,
+	};
+	sourcesOut.sort((a, b) => (order[a.status] || 4) - (order[b.status] || 4));
 
-  return {
-    success: true,
-    tmdbId: parseInt(tmdbId),
-    type,
-    ...(type === 'tv' ? { season: parseInt(season), episode: parseInt(episode) } : {}),
-    sources: sourcesOut,
-    workingSources: working,
-    totalSourcesChecked: sources.length,
-    totalUniqueStreams: uniqueUrls.size,
-    elapsed_ms: Date.now() - globalStart,
-    timestamp: new Date().toISOString(),
-  };
+	return {
+		success: true,
+		tmdbId: parseInt(tmdbId),
+		type,
+		...(type === "tv"
+			? { season: parseInt(season), episode: parseInt(episode) }
+			: {}),
+		workingSources: working.length,
+		totalSources: sources.length,
+		totalStreams: uniqueUrls.size,
+		elapsed_ms: Date.now() - start,
+		sources: sourcesOut,
+	};
 }
 
-module.exports = { aggregateAll, sourceCount: sources.length };
+// ── List sources (for /api/sources endpoint) ────────────────────────────────
+
+function listSources() {
+	return sources.map((s) => s.name);
+}
+
+module.exports = { aggregateAll, listSources, sourceCount: sources.length };
