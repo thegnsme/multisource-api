@@ -24,10 +24,54 @@ const TESTS = [
 	{ label: "TV: GoT S1E1", tmdbId: 1399, type: "tv", season: 1, episode: 1 },
 ];
 
+// Sources that need browser context (skip in HTTP-only tests)
+const BROWSER_SOURCES = [
+	"autoembed.co",
+	"cinesrc.st",
+	"cloudnestra",
+	"embed.api.stream",
+	"embedmaster.link",
+	"godriveplayer.com",
+	"megaembed.com",
+	"moviesapi.to",
+	"multiembed.mov",
+	"nontongo.win",
+	"primesrc.me",
+	"rivestream.app",
+	"smashystream.com",
+	"streammafia.to",
+	"twoembed.cc",
+	"twoembed.online",
+	"vembed.click",
+	"vidapi.xyz",
+	"vidbinge.to",
+	"vidfast.pro",
+	"vidlux.online",
+	"vidplus.to",
+	"vidrock.net",
+	"vidsrc.embed.su",
+	"vidsrc.fyi",
+	"vidsrc.icu",
+	"vidsrc.mov",
+	"vidsrc.to",
+	"vidsrc.wtf",
+	"vidsrcme.su",
+	"vidstorm.ru",
+	"vidzee.wtf",
+	"vsrc.su",
+	"vsrc.su.embed",
+];
+
+// Sources that need more time
+const SLOW_SOURCES = ["vaplayer", "videasy.net", "vidnest.api", "flicky.api"];
+
 async function main() {
 	const sources = listSources();
+	const httpSources = sources.filter((s) => !BROWSER_SOURCES.includes(s));
+	const browserCount = sources.length - httpSources.length;
+
 	console.log(
-		`\nTesting ${sources.length} sources against ${TESTS.length} TMDB IDs\n`,
+		`\nTesting ${sources.length} sources (${httpSources.length} HTTP, ${browserCount} browser-required)\n`,
 	);
 
 	let passed = 0;
@@ -46,8 +90,9 @@ async function main() {
 			);
 			const elapsed = Date.now() - start;
 
-			// Show per-source results
+			// Show per-source results (only HTTP sources for this test)
 			for (const s of result.sources) {
+				if (BROWSER_SOURCES.includes(s.source)) continue; // skip browser sources
 				const icon =
 					s.status === "working" ? "✅" : s.status === "embed" ? "🔶" : "❌";
 				const detail =
@@ -57,11 +102,15 @@ async function main() {
 				console.log(`  ${icon} ${s.source.padEnd(25)} ${detail}`);
 			}
 
+			const httpWorking = result.sources.filter(
+				(s) => !BROWSER_SOURCES.includes(s.source) && s.status === "working",
+			).length;
+
 			console.log(
-				`  → ${result.workingSources}/${result.totalSources} working, ${result.totalStreams} streams (${elapsed}ms)\n`,
+				`  → ${httpWorking}/${httpSources.length} HTTP sources working, ${result.totalStreams} streams (${elapsed}ms)\n`,
 			);
 			total++;
-			if (result.workingSources > 0) passed++;
+			if (httpWorking > 0) passed++;
 		} catch (err) {
 			console.log(`  ❌ Failed: ${err.message}\n`);
 			total++;
