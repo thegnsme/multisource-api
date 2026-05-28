@@ -3,6 +3,17 @@
 Aggregate HLS video streams from multiple sources for any TMDB movie or TV show.
 
 [![CI](https://github.com/thegnsme/multisource-api/actions/workflows/build.yml/badge.svg)](https://github.com/thegnsme/multisource-api/actions/workflows/build.yml)
+[![Health Check](https://github.com/thegnsme/multisource-api/actions/workflows/source-health.yml/badge.svg)](https://github.com/thegnsme/multisource-api/actions/workflows/source-health.yml)
+
+<!-- HEALTH_CHECK_START -->
+
+> **📊 Source Health Status**
+>
+> ⏳ Waiting for first health check run...
+>
+> [📋 Full Report →](./SOURCE_HEALTH.md)
+
+<!-- HEALTH_CHECK_END -->
 
 ## How It Works
 

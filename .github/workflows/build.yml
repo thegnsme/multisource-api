@@ -42,7 +42,7 @@ jobs:
         run: node -e "const s=require('./sources'); console.log('✅ Loaded ' + s.sourceCount + ' sources')"
 
       - name: Test with TMDB IDs
-        run: timeout 180 CN_RETRIES=2 node test.js
+        run: CN_RETRIES=2 timeout 180 node test.js
         timeout-minutes: 4
 
       - name: Verify API output

@@ -37,7 +37,9 @@ function loadSources() {
 	const sourceDir = path.join(__dirname, "..", "sources");
 	const files = fs
 		.readdirSync(sourceDir)
-		.filter((f) => f.endsWith(".js") && f !== "index.js")
+		.filter(
+			(f) => f.endsWith(".js") && f !== "index.js" && f !== "_template.js",
+		)
 		.sort();
 
 	const sources = [];
