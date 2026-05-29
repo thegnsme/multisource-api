@@ -1,398 +1,279 @@
 #!/usr/bin/env node
 /**
- * Source Health Check — tests ALL sources against a list of TMDB movie IDs
- * and generates a status report (SOURCE_HEALTH.md).
+ * Source Health Check — Tests all sources and generates a health report.
+ * =====================================================================
  *
- * Usage:  node scripts/source-health.js
+ * This script runs all sources against a set of test TMDB IDs and
+ * produces a detailed health report showing which sources are working.
  *
- * Each source is tested against every TMDB ID.
- * A source is marked 🟢 Working if it returns streams for at least one movie.
- * A source is marked 🔴 Not Working if it fails for all movies.
+ * Usage:
+ *   node scripts/source-health.js                    # Run health check
+ *   node scripts/source-health.js --update-readme    # Update SOURCE_HEALTH.md
+ *   node scripts/source-health.js --quick            # Quick test (1 movie)
+ *   node scripts/source-health.js --output=json      # Output as JSON
  *
- * Results are saved to SOURCE_HEALTH.md in the repo root.
- * The GitHub Actions workflow commits and pushes any changes.
+ * @module scripts/source-health
  */
 
-const fs = require("fs");
-const path = require("path");
+"use strict";
 
-// ── Configuration ──────────────────────────────────────────────────────────
+const { scrapeAll, getSourceCount, listFormats } = require("../raw-api");
 
-const TMDB_IDS = [
-	{ id: 157336, title: "Interstellar" },
-	{ id: 299534, title: "Avengers: Endgame" },
-	{ id: 49026, title: "The Dark Knight Rises" },
-	{ id: 687163, title: "The Super Mario Bros. Movie" },
-	{ id: 83533, title: "Avatar: Fire and Ash" },
-	{ id: 550, title: "Fight Club" },
-	{ id: 293660, title: "The Nice Guys" },
+// ── Configuration ────────────────────────────────────────────────────────────
+
+const TEST_CASES = [
+	{ label: "Movie: Avengers (2012)", tmdbId: 24428, type: "movie" },
+	{ label: "Movie: Interstellar", tmdbId: 157336, type: "movie" },
+	{ label: "Movie: Fight Club", tmdbId: 550, type: "movie" },
+	{
+		label: "TV: Breaking Bad S1E1",
+		tmdbId: 1396,
+		type: "tv",
+		season: 1,
+		episode: 1,
+	},
+	{ label: "TV: GoT S1E1", tmdbId: 1399, type: "tv", season: 1, episode: 1 },
 ];
 
-const SOURCE_TIMEOUT = 30000; // 30s max per source per movie
-const OUTPUT_FILE = path.join(__dirname, "..", "SOURCE_HEALTH.md");
+// ── Health Check Runner ──────────────────────────────────────────────────────
 
-// ── Load Sources ───────────────────────────────────────────────────────────
+async function runHealthCheck(quick = false) {
+	const testsToRun = quick ? TEST_CASES.slice(0, 1) : TEST_CASES;
+	const allSources = new Map(); // name -> { working: number, total: number, streams: number, errors: string[], testResults: object[] }
 
-function loadSources() {
-	const sourceDir = path.join(__dirname, "..", "sources");
-	const files = fs
-		.readdirSync(sourceDir)
-		.filter(
-			(f) => f.endsWith(".js") && f !== "index.js" && f !== "_template.js",
-		)
-		.sort();
+	for (const test of testsToRun) {
+		console.error(`\n[health] Testing: ${test.label}`);
+		console.error(`[health] TMDB ${test.tmdbId} (${test.type})`);
 
-	const sources = [];
-	for (const file of files) {
-		const name = file.replace(/\.js$/, "").replace(/_/g, ".");
 		try {
-			const mod = require(path.join(sourceDir, file));
-			if (typeof mod.scrapeSource === "function") {
-				sources.push({ name, file, scrape: mod.scrapeSource });
+			const result = await scrapeAll(
+				test.tmdbId,
+				test.type,
+				test.season,
+				test.episode,
+			);
+
+			for (const s of result.sources) {
+				if (!allSources.has(s.source)) {
+					allSources.set(s.source, {
+						source: s.source,
+						embedUrl: s.embedUrl || "",
+						working: 0,
+						total: 0,
+						totalStreams: 0,
+						errors: [],
+						testResults: [],
+					});
+				}
+
+				const entry = allSources.get(s.source);
+				entry.total++;
+
+				if (s.status === "working" && s.streams && s.streams.length > 0) {
+					entry.working++;
+					entry.totalStreams += s.streams.length;
+					entry.testResults.push({
+						test: test.label,
+						status: "working",
+						streams: s.streams.length,
+					});
+				} else if (s.status === "embed") {
+					entry.testResults.push({
+						test: test.label,
+						status: "embed",
+						streams: 0,
+					});
+				} else if (s.status === "no_streams") {
+					entry.testResults.push({
+						test: test.label,
+						status: "no_streams",
+						streams: 0,
+					});
+				} else {
+					const errMsg = s.error || s.status || "unknown";
+					entry.errors.push(`[${test.label}] ${errMsg}`);
+					entry.testResults.push({
+						test: test.label,
+						status: "error",
+						error: errMsg,
+					});
+				}
 			}
-		} catch (e) {
-			sources.push({ name, file, scrape: null, loadError: e.message });
+
+			console.error(
+				`[health] Done: ${result.workingSources}/${result.totalSources} working, ${result.totalStreams} streams`,
+			);
+		} catch (err) {
+			console.error(`[health] Failed: ${err.message}`);
 		}
 	}
-	return sources;
+
+	// Compute overall health
+	const sourcesArray = Array.from(allSources.values()).map((entry) => {
+		const reliability =
+			entry.total > 0 ? Math.round((entry.working / entry.total) * 100) : 0;
+		const status =
+			reliability >= 50
+				? "✅ working"
+				: reliability >= 20
+					? "🟡 partial"
+					: entry.totalStreams > 0
+						? "🟡 embed"
+						: "❌ broken";
+
+		return {
+			...entry,
+			reliability,
+			status,
+		};
+	});
+
+	// Sort: working first, then by reliability desc
+	sourcesArray.sort((a, b) => {
+		if (a.reliability !== b.reliability) return b.reliability - a.reliability;
+		return a.source.localeCompare(b.source);
+	});
+
+	return sourcesArray;
 }
 
-// ── Test a single source against a single movie ────────────────────────────
+// ── Report Generators ────────────────────────────────────────────────────────
 
-async function testSourceMovie(source, tmdb) {
-	if (!source.scrape) {
-		return {
-			movie: tmdb,
-			status: "load_error",
-			error: source.loadError,
-			streams: 0,
-			elapsed: 0,
-		};
+function generateMarkdownReport(healthData, elapsed) {
+	const total = healthData.length;
+	const working = healthData.filter((s) => s.status.startsWith("✅")).length;
+	const partial = healthData.filter((s) => s.status.startsWith("🟡")).length;
+	const broken = healthData.filter((s) => s.status.startsWith("❌")).length;
+	const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+	let md = `# 📊 Source Health Report
+
+> **Last checked:** ${now}
+> **Duration:** ${elapsed}ms
+> **Sources:** ${total} total | ✅ ${working} working | 🟡 ${partial} partial | ❌ ${broken} broken
+
+## Summary
+
+| Status | Count |
+|--------|-------|
+| ✅ Working | ${working} |
+| 🟡 Partial/Embed | ${partial} |
+| ❌ Broken | ${broken} |
+| **Total** | **${total}** |
+
+## Per-Source Details
+
+| Source | Status | Reliability | Streams Found | Tests Passed | Errors |
+|--------|--------|-------------|---------------|--------------|--------|
+`;
+
+	for (const s of healthData) {
+		const errors =
+			s.errors.length > 0 ? s.errors.slice(0, 2).join("<br>") : "—";
+		md += `| ${s.source} | ${s.status} | ${s.reliability}% | ${s.totalStreams} | ${s.working}/${s.total} | ${errors} |\n`;
 	}
 
-	const start = Date.now();
-	try {
-		// Race the source against a timeout
-		const result = await Promise.race([
-			source.scrape({ tmdbId: tmdb.id, type: "movie" }),
-			new Promise((_, reject) =>
-				setTimeout(() => reject(new Error("TIMEOUT")), SOURCE_TIMEOUT),
-			),
-		]);
-
-		const elapsed = Date.now() - start;
-		const streamCount = (result.streams || []).length;
-
-		if (streamCount > 0) {
-			return { movie: tmdb, status: "pass", streams: streamCount, elapsed };
-		}
-
-		if (result.status === "working" && streamCount === 0) {
-			return {
-				movie: tmdb,
-				status: "fail",
-				error: "status=working but 0 streams",
-				elapsed,
-			};
-		}
-
-		return {
-			movie: tmdb,
-			status: "fail",
-			error: result.status || "no_streams",
-			elapsed,
-		};
-	} catch (err) {
-		const elapsed = Date.now() - start;
-		return {
-			movie: tmdb,
-			status: "fail",
-			error:
-				err.message === "TIMEOUT" ? "timeout" : err.message.substring(0, 80),
-			elapsed,
-		};
-	}
-}
-
-// ── Generate markdown report ───────────────────────────────────────────────
-
-function generateReport(results, elapsed) {
-	const sources = Object.keys(results).sort();
-	const totalSources = sources.length;
-	const workingSources = sources.filter(
-		(s) => results[s].overall === "working",
-	).length;
-	const failedSources = sources.filter(
-		(s) => results[s].overall === "failed",
-	).length;
-	const erroredSources = sources.filter(
-		(s) => results[s].overall === "load_error",
-	).length;
-
-	const now = new Date();
-	const p = {};
-	Intl.DateTimeFormat("en-IN", {
-		timeZone: "Asia/Kolkata",
-		day: "2-digit",
-		month: "short",
-		year: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		hour12: true,
-	})
-		.formatToParts(now)
-		.forEach((x) => (p[x.type] = x.value));
-	const dateStr = `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second} ${p.dayPeriod.toUpperCase()} IST`;
-
-	let md = "";
-	md += `# 📊 Source Health Report\n\n`;
-	md += `**Generated:** ${dateStr}  \n`;
-	md += `**Total Sources:** ${totalSources}  \n`;
-	md += `**🟢 Working:** ${workingSources}  \n`;
-	md += `**🔴 Not Working:** ${failedSources}  \n`;
-	md += `**⚠️ Load Error:** ${erroredSources}  \n`;
-	md += `**Runtime:** ${elapsed}s  \n`;
-	md += `**Movies Tested:** ${TMDB_IDS.map((t) => `\`${t.title}\``).join(", ")}\n\n`;
-
-	// ── Summary Table ────────────────────────────────────────────────────────
-	md += `## Summary\n\n`;
-	md += `| Source | Status | Movies Passed | Movies Failed | Total Streams |\n`;
-	md += `|--------|--------|--------------|--------------|--------------|\n`;
-
-	for (const name of sources) {
-		const r = results[name];
-		const icon =
-			r.overall === "working" ? "🟢" : r.overall === "failed" ? "🔴" : "⚠️";
-		const label =
-			r.overall === "working"
-				? "Working"
-				: r.overall === "failed"
-					? "Not Working"
-					: "Load Error";
-		md += `| ${icon} ${name.padEnd(22)} | ${label.padEnd(12)} | ${r.passed} | ${r.failed} | ${r.totalStreams} |\n`;
-	}
-
-	md += `\n`;
-
-	// ── Per-Movie Breakdown ─────────────────────────────────────────────────
-	md += `## Per-Source Details\n\n`;
-
-	for (const name of sources) {
-		const r = results[name];
-		const icon = r.overall === "working" ? "🟢" : "🔴";
-		md += `### ${icon} ${name}\n\n`;
-		md += `| Movie | Status | Streams | Time |\n`;
-		md += `|-------|--------|---------|------|\n`;
-
-		for (const test of r.tests) {
-			const statusIcon = test.status === "pass" ? "✅" : "❌";
-			const reason =
-				test.status === "pass"
-					? `${test.streams} streams`
-					: test.error || "no streams";
-			md += `| ${test.movie.title.padEnd(35)} | ${statusIcon} | ${reason.padEnd(20)} | ${test.elapsed}ms |\n`;
-		}
-		md += `\n`;
-	}
-
-	// ── Legend ───────────────────────────────────────────────────────────────
-	md += `## Legend\n\n`;
-	md += `- **🟢 Working** — Source returned streams for at least one movie  \n`;
-	md += `- **🔴 Not Working** — Source returned zero streams for ALL movies  \n`;
-	md += `- **✅ Pass** — Source returned ≥1 valid HLS stream for this movie  \n`;
-	md += `- **❌ Fail** — Source returned no streams or errored for this movie  \n`;
-	md += `- **timeout** — Source did not respond within ${SOURCE_TIMEOUT / 1000}s  \n`;
-	md += `- **load_error** — Source module could not be loaded (syntax error, missing dependency)  \n\n`;
-
-	md += `---\n`;
-	md += `_Auto-generated by \`scripts/source-health.js\` — run every 8 hours via GitHub Actions._\n\n`;
-	md += `> **Note:** Sources marked as "embed" require a browser engine (Playwright/Puppeteer) to execute client-side JavaScript. They will always fail in HTTP-only health checks but work in real browser environments.\n`;
+	md += `\n## Legend\n`;
+	md += `- **✅ working**: Source reliably returns streams (≥50% of tests)\n`;
+	md += `- **🟡 partial**: Source works sometimes or returns embed URLs only\n`;
+	md += `- **❌ broken**: Source fails all tests\n`;
+	md += `- **Reliability**: Percentage of tests where the source returned working streams\n\n`;
+	md += `_Generated by MultiSource API v4.0.0 Health Check_\n`;
 
 	return md;
 }
 
-// ── Update README.md with live status box ─────────────────────────────────
+function generateJSONReport(healthData, elapsed) {
+	const total = healthData.length;
+	const working = healthData.filter((s) => s.status.startsWith("✅")).length;
+	const partial = healthData.filter((s) => s.status.startsWith("🟡")).length;
+	const broken = healthData.filter((s) => s.status.startsWith("❌")).length;
 
-function updateReadmeStatus(working, failed, total) {
-	const readmePath = path.join(__dirname, "..", "README.md");
-	try {
-		let readme = fs.readFileSync(readmePath, "utf-8");
-
-		const now = new Date();
-		const p = {};
-		Intl.DateTimeFormat("en-IN", {
-			timeZone: "Asia/Kolkata",
-			day: "2-digit",
-			month: "short",
-			year: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-			second: "2-digit",
-			hour12: true,
-		})
-			.formatToParts(now)
-			.forEach((x) => (p[x.type] = x.value));
-		const dateStr = `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}:${p.second} ${p.dayPeriod.toUpperCase()} IST`;
-		const workingLabel =
-			working > 0 ? `🟢 **${working}** / ${total}` : "🔴 **0**";
-		const statusIcon = working > 0 ? "✅" : "❌";
-
-		const statusBlock = [
-			`> **📊 Source Health Status**`,
-			`>`,
-			`> ${statusIcon} ${workingLabel} sources working`,
-			`>`,
-			`> 🕐 **Last checked:** ${dateStr}`,
-			`>`,
-			`> [📋 Full Report →](./SOURCE_HEALTH.md)`,
-		].join("\n");
-
-		// Replace content between HEALTH_CHECK_START and HEALTH_CHECK_END markers
-		const startMarker = "<!-- HEALTH_CHECK_START -->";
-		const endMarker = "<!-- HEALTH_CHECK_END -->";
-		const startIdx = readme.indexOf(startMarker);
-		const endIdx = readme.indexOf(endMarker);
-
-		if (startIdx !== -1 && endIdx !== -1) {
-			const before = readme.substring(0, startIdx + startMarker.length);
-			const after = readme.substring(endIdx);
-			readme = before + "\n" + statusBlock + "\n" + after;
-			fs.writeFileSync(readmePath, readme, "utf-8");
-			console.log(
-				`✅ README.md status box updated: ${working}/${total} working`,
-			);
-		} else {
-			console.log(
-				"⚠️  HEALTH_CHECK markers not found in README.md — skipping update",
-			);
-		}
-	} catch (err) {
-		console.error("❌ Failed to update README.md:", err.message);
-	}
+	return {
+		timestamp: new Date().toISOString(),
+		elapsed_ms: elapsed,
+		summary: {
+			total,
+			working,
+			partial,
+			broken,
+			health_percent: total > 0 ? Math.round((working / total) * 100) : 0,
+		},
+		sources: healthData,
+	};
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-	console.log(
-		"╔══════════════════════════════════════════════════════════════╗",
-	);
-	console.log(
-		"║        Source Health Check — Testing All Sources            ║",
-	);
-	console.log(
-		"╚══════════════════════════════════════════════════════════════╝\n",
-	);
+	const args = {};
+	process.argv.slice(2).forEach((a) => {
+		const [k, v] = a.replace(/^--/, "").split("=");
+		args[k] = v || true;
+	});
 
-	const startAll = Date.now();
-	const sources = loadSources();
-	console.log(`Loaded ${sources.length} source modules\n`);
-	console.log(`Testing against ${TMDB_IDS.length} movies:\n`);
-	for (const t of TMDB_IDS) {
-		console.log(`  📺 ${t.title.padEnd(35)} (TMDB: ${t.id})`);
-	}
-	console.log("");
+	const quick = !!args.quick;
+	const updateReadme = !!args["update-readme"];
+	const outputFormat = args.output || "text";
 
-	// Results accumulator: { sourceName: { overall, passed, failed, totalStreams, tests[] } }
-	const results = {};
+	console.error("🔍 MultiSource API — Source Health Check\n");
 
-	// Initialize results for all sources
-	for (const source of sources) {
-		results[source.name] = {
-			overall: source.scrape ? "pending" : "load_error",
-			passed: 0,
-			failed: 0,
-			totalStreams: 0,
-			tests: [],
-			loadError: source.loadError || null,
-		};
-	}
+	const start = Date.now();
+	const healthData = await runHealthCheck(quick);
+	const elapsed = Date.now() - start;
 
-	// For each movie, test all sources in parallel
-	for (const tmdb of TMDB_IDS) {
-		console.log(`── Testing ${tmdb.title} ──\n`);
+	console.error(`\n✅ Health check complete in ${elapsed}ms`);
+	console.error(`   ${healthData.length} sources analyzed\n`);
 
-		const activeSources = sources.filter((s) => s.scrape);
-
-		// Run all sources for this movie in parallel
-		const movieResults = await Promise.allSettled(
-			activeSources.map((source) => testSourceMovie(source, tmdb)),
+	if (outputFormat === "json") {
+		const jsonReport = generateJSONReport(healthData, elapsed);
+		console.log(JSON.stringify(jsonReport, null, 2));
+	} else if (updateReadme) {
+		const mdReport = generateMarkdownReport(healthData, elapsed);
+		const fs = require("fs");
+		const reportPath = require("path").join(
+			__dirname,
+			"..",
+			"SOURCE_HEALTH.md",
 		);
+		fs.writeFileSync(reportPath, mdReport, "utf-8");
+		console.error(`📝 Report written to SOURCE_HEALTH.md`);
+		console.log(mdReport);
+	} else {
+		// Text format
+		console.log("\n" + "=".repeat(70));
+		console.log("  SOURCE HEALTH REPORT");
+		console.log("=".repeat(70));
 
-		for (let i = 0; i < activeSources.length; i++) {
-			const source = activeSources[i];
-			const r = movieResults[i];
-			const testResult =
-				r.status === "fulfilled"
-					? r.value
-					: {
-							movie: tmdb,
-							status: "fail",
-							error: r.reason?.message?.substring(0, 80) || "unknown error",
-							streams: 0,
-							elapsed: Date.now() - startAll,
-						};
-
-			results[source.name].tests.push(testResult);
-
-			if (testResult.status === "pass") {
-				results[source.name].passed++;
-				results[source.name].totalStreams += testResult.streams;
-			} else {
-				results[source.name].failed++;
-			}
-
-			const icon = testResult.status === "pass" ? "✅" : "❌";
-			const detail =
-				testResult.status === "pass"
-					? `${testResult.streams} streams`
-					: testResult.error || "no streams";
+		for (const s of healthData) {
+			const icon = s.status.startsWith("✅")
+				? "✅"
+				: s.status.startsWith("🟡")
+					? "🟡"
+					: "❌";
+			const padName = s.source.padEnd(25);
 			console.log(
-				`  ${icon} ${source.name.padEnd(25)} ${detail.padEnd(25)} ${testResult.elapsed}ms`,
+				`  ${icon} ${padName} ${s.reliability}% (${s.working}/${s.total})`,
 			);
+
+			if (s.errors.length > 0) {
+				for (const err of s.errors.slice(0, 1)) {
+					console.log(`       └─ ${err.slice(0, 120)}`);
+				}
+			}
 		}
-		console.log("");
-	}
 
-	// Determine overall status per source
-	let workingCount = 0;
-	let failedCount = 0;
-
-	for (const source of sources) {
-		const r = results[source.name];
-		if (r.overall === "load_error") continue;
-
-		// Working = at least one movie passed
-		r.overall = r.passed > 0 ? "working" : "failed";
-		if (r.overall === "working") workingCount++;
-		else failedCount++;
-	}
-
-	// Generate report
-	const totalElapsed = ((Date.now() - startAll) / 1000).toFixed(1);
-	const report = generateReport(results, totalElapsed);
-
-	// Write the full report
-	fs.writeFileSync(OUTPUT_FILE, report, "utf-8");
-	console.log(`Report written to ${OUTPUT_FILE}`);
-
-	// ── Update README.md status line ────────────────────────────────────────
-	updateReadmeStatus(workingCount, failedCount, sources.length);
-
-	console.log(
-		`\n📊 Summary: ${workingCount} 🟢 working, ${failedCount} 🔴 not working, ${sources.length - workingCount - failedCount} ⚠️ load error`,
-	);
-	console.log(`⏱  Total runtime: ${totalElapsed}s\n`);
-
-	// Exit with error if no sources are working
-	if (workingCount === 0) {
-		console.error("❌ FATAL: No sources are working!");
-		process.exit(1);
+		console.log("=".repeat(70));
+		const working = healthData.filter((s) => s.status.startsWith("✅")).length;
+		const broken = healthData.filter((s) => s.status.startsWith("❌")).length;
+		console.log(
+			`  ✅ ${working} working  |  ❌ ${broken} broken  |  ${healthData.length} total`,
+		);
+		console.log("=".repeat(70));
 	}
 }
 
 main().catch((err) => {
-	console.error("Fatal error:", err);
+	console.error("Fatal:", err.message);
 	process.exit(1);
 });

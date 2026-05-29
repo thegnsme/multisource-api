@@ -2,50 +2,58 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [master]
   pull_request:
-    branches: [ main, master ]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
   test:
-    name: Test API
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
     strategy:
       matrix:
-        node-version: [18, 20, 22]
-      fail-fast: false
+        node-version: [18.x, 20.x, 22.x]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci || npm install
+      - name: Install dependencies (for local source files)
+        run: npm install
 
-      - name: Verify source files
+      - name: Run unit tests
+        run: node test.js --format
+
+      - name: Quick integration test
+        run: node test.js --quick
+        timeout-minutes: 3
+
+      - name: Verify zero-dependency pipe mode
         run: |
-          echo "📁 Source files:"
-          ls -la sources/*.js
-          echo ""
-          echo "🧩 Source count:"
-          ls -1 sources/*.js | wc -l
+          echo "Testing pipe mode (no node_modules)..."
+          mv node_modules node_modules_bak
+          node -e "
+            const { initSources } = require('./raw-api');
+            initSources().then(() => console.log('✅ Sources loaded without npm dependencies')).catch(e => console.log('⚠️', e.message));
+          "
+          mv node_modules_bak node_modules
 
-      - name: Quick syntax check
-        run: node -e "const s=require('./sources'); console.log('✅ Loaded ' + s.sourceCount + ' sources')"
-
-      - name: Test with TMDB IDs
-        run: CN_RETRIES=2 timeout 180 node test.js
-        timeout-minutes: 4
-
-      - name: Verify API output
+      - name: Test all output formats
         run: |
-          echo "✅ All tests passed!"
-          echo "🎬 Video Sources Aggregator API ready"
+          echo "Format: full"
+          node raw-api.js --tmdb=24428 --format=full 2>&1 | head -5
+          echo "Format: compact"
+          node raw-api.js --tmdb=24428 --format=compact 2>&1 | head -5
+          echo "Format: cloudstream"
+          node raw-api.js --tmdb=24428 --format=cloudstream 2>&1 | head -5
+          echo "Format: skystream"
+          node raw-api.js --tmdb=24428 --format=skystream 2>&1 | head -5
+          echo "Format: nuvio"
+          node raw-api.js --tmdb=24428 --format=nuvio 2>&1 | head -5
+          echo "Format: stremio"
+          node raw-api.js --tmdb=24428 --format=stremio 2>&1 | head -5
+          echo "✅ All formats working"

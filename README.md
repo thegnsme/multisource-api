@@ -1,11 +1,11 @@
-# 🎬 MultiSource API
+# 🎬 MultiSource API — v4.0
 
-Aggregate HLS video streams from multiple sources for any TMDB movie or TV show.
+**Zero-dependency, serverless API** that aggregates HLS video streams from multiple sources for any TMDB movie or TV show. Sources are managed **exclusively** in the `sources/` directory — **nothing is hardcoded** in the codebase.
 
 [![CI](https://github.com/thegnsme/multisource-api/actions/workflows/build.yml/badge.svg)](https://github.com/thegnsme/multisource-api/actions/workflows/build.yml)
-[![Health Check](https://github.com/thegnsme/multisource-api/actions/workflows/source-health.yml/badge.svg)](https://github.com/thegnsme/multisource-api/actions/workflows/source-health.yml)
 
 <!-- HEALTH_CHECK_START -->
+
 > **📊 Source Health Status**
 >
 > ✅ 🟢 **9** / 46 sources working
@@ -13,194 +13,237 @@ Aggregate HLS video streams from multiple sources for any TMDB movie or TV show.
 > 🕐 **Last checked:** 28-May-2026 11:35:30 PM IST
 >
 > [📋 Full Report →](./SOURCE_HEALTH.md)
+
 <!-- HEALTH_CHECK_END -->
 
-## How It Works
+---
 
-```
-sources/           ← DROP A FILE HERE, IT JUST WORKS
-  index.js         ← auto-discovers all .js files
-  vaplayer.js      ← each file = one source
-  cine_su.js
-  ...
+## 🚀 Features
 
-api.js             → CLI
-server.js          → HTTP API
-```
+- **🔌 Serverless** — Pipe directly from GitHub raw URL, no hosting needed
+- **📁 Source-only management** — Add/remove/edit sources in `sources/`, never touch other files
+- **🎯 Zero dependencies** — Only Node.js built-in modules (`https`, `crypto`, `http`, `url`, `fs`)
+- **🎨 Multiple formats** — Supports CloudStream, SkyStream, Nuvio, Stremio, and more
+- **⚡ Parallel execution** — All sources run concurrently with per-source timeout
+- **🛡️ Error resilient** — One failing source never breaks others
+- **🌐 Built-in HTTP server** — No Express needed, runs on Node.js built-in `http` module
 
-**Add a source** → create `sources/mysource.js` → done.  
-**Remove a source** → delete the file → done.  
-**Fix a source** → edit the file → done.
+---
 
-You never touch `api.js`, `server.js`, or any other file.
+## 📋 Quick Start
 
-## Quick Start
+### Pipe from GitHub (no install, no hosting)
 
 ```bash
-# CLI
-npm install
-node api.js --tmdb=24428
+# Set your repo info (change to your own fork)
+export GITHUB_USER=thegnsme
+export GITHUB_REPO=multisource-api
 
-# HTTP Server
-npm start
-curl http://localhost:3000/api/movie/24428
-
-# Test all sources
-node test.js
+# Pipe and run
+curl -sL "https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/master/raw-api.js" \
+  | node - --tmdb=24428
 ```
 
-## CLI
+### Local clone
 
 ```bash
-node api.js --tmdb=24428                          # Movie
-node api.js --tmdb=1399 --type=tv --season=1 --episode=1  # TV
-node api.js --imdb=tt0848228                      # Auto-detect via IMDB
+git clone https://github.com/thegnsme/multisource-api.git
+cd multisource-api
+node raw-api.js --tmdb=24428
+node raw-api.js --server    # Start HTTP server on port 3000
 ```
 
-## HTTP API
+---
 
-| Endpoint                                 | Description          |
-| ---------------------------------------- | -------------------- |
-| `GET /api/health`                        | Server health        |
-| `GET /api/sources`                       | List all sources     |
-| `GET /api/movie/:tmdbId`                 | Movie streams        |
-| `GET /api/tv/:tmdbId?season=1&episode=1` | TV streams           |
-| `GET /api/by-imdb/:imdbId`               | Auto-detect movie/TV |
+## 📖 Usage
 
-### Response Format
+### CLI
 
-```json
-{
-  "success": true,
-  "tmdbId": 24428,
-  "type": "movie",
-  "workingSources": 9,
-  "totalSources": 46,
-  "totalStreams": 45,
-  "elapsed_ms": 12000,
-  "sources": [
-    {
-      "source": "vaplayer.ru",
-      "status": "working",
-      "streams": [
-        {
-          "url": "https://...master.m3u8",
-          "type": "hls",
-          "quality": "1080p",
-          "resolution": "1920x1080"
-        }
-      ]
-    }
-  ]
-}
+```bash
+# Movie by TMDB ID
+node raw-api.js --tmdb=24428
+
+# TV show by TMDB ID
+node raw-api.js --tmdb=1399 --type=tv --season=1 --episode=1
+
+# By IMDB ID (auto-detects movie/TV)
+node raw-api.js --imdb=tt0848228
+
+# Specific output format
+node raw-api.js --tmdb=24428 --format=compact
+node raw-api.js --tmdb=24428 --format=cloudstream
+node raw-api.js --tmdb=24428 --format=skystream
+node raw-api.js --tmdb=24428 --format=nuvio
+node raw-api.js --tmdb=24428 --format=stremio
+
+# Start HTTP server
+node raw-api.js --server --port=8080
+
+# Remote source loading (when piped)
+curl -sL https://raw.githubusercontent.com/USER/REPO/master/raw-api.js \
+  | node - --tmdb=24428 --github-user=USER --github-repo=REPO
 ```
 
-## Adding a Source
+### HTTP API
 
-Copy the template:
+| Endpoint                   | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `GET /api/health`          | Server health check                      |
+| `GET /api/sources`         | List all loaded sources                  |
+| `GET /api/formats`         | List available output formats            |
+| `GET /api/movie/:tmdbId`   | Movie streams (`?format=`)               |
+| `GET /api/tv/:tmdbId`      | TV streams (`?season=&episode=&format=`) |
+| `GET /api/by-imdb/:imdbId` | Auto-detect movie/TV (`?format=`)        |
+
+### Import as Module
+
+```javascript
+const { scrapeAll, listFormats } = require("./raw-api");
+
+const result = await scrapeAll(24428, "movie", 1, 1, { format: "cloudstream" });
+console.log(result);
+
+console.log("Available formats:", listFormats());
+```
+
+---
+
+## 📁 Project Structure
+
+```
+multisource-api/
+├── raw-api.js              # ← The serverless API engine (do NOT edit)
+├── sources/                # ← ONLY DIRECTORY YOU EDIT
+│   ├── index.js            #   Auto-discovery engine
+│   ├── _template.js        #   Copy to add a new source
+│   ├── cine_su.js          #   Each file = one video source
+│   ├── vaplayer.js
+│   └── ...                 # 40+ sources
+├── scripts/
+│   └── source-health.js    # Health check runner
+├── test.js                 # Test suite
+├── package.json
+└── README.md
+```
+
+---
+
+## ➕ Adding a Source
+
+**Step 1:** Copy the template:
 
 ```bash
 cp sources/_template.js sources/mysource.js
 ```
 
-Edit `sources/mysource.js`:
+**Step 2:** Edit `sources/mysource.js` — implement the `scrapeSource()` function:
 
-```js
-const axios = require("axios");
-
+```javascript
 async function scrapeSource({ tmdbId, type, season, episode }) {
   const start = Date.now();
-
-  try {
-    const resp = await axios.get(`https://api.mysource.com/${tmdbId}`, {
-      timeout: 10000,
-    });
-
-    const streams = resp.data.streams.map((s) => ({
-      url: s.url,
-      type: "hls",
-      quality: s.quality || "",
-      resolution: s.resolution || "",
-    }));
-
-    return {
-      source: "mysource.com",
-      status: streams.length > 0 ? "working" : "no_streams",
-      streams,
-      latency_ms: Date.now() - start,
-    };
-  } catch (err) {
-    return {
-      source: "mysource.com",
-      status: "error",
-      error: err.message,
-      streams: [],
-      latency_ms: Date.now() - start,
-    };
-  }
+  // Your scraping logic here
+  return {
+    source: "mysource.com",
+    embedUrl: `https://mysource.com/embed/${type}/${tmdbId}`,
+    status: "working", // "working" | "no_streams" | "embed" | "error"
+    streams: [
+      { url: "...", type: "hls", quality: "1080p", resolution: "1920x1080" },
+    ],
+    latency_ms: Date.now() - start,
+  };
 }
-
 module.exports = { scrapeSource };
 ```
 
-That's it. Auto-discovered on next run.
+**Step 3:** Done. Auto-discovered on next run. No other files to edit.
 
 ### Source Contract
 
-Your `scrapeSource()` function receives:
+| Field        | Type     | Required | Description                               |
+| ------------ | -------- | -------- | ----------------------------------------- | ------------ | ------- | ------- |
+| `source`     | `string` | ✅       | Display name (auto-derived from filename) |
+| `embedUrl`   | `string` | ✅       | Link to embed/player page                 |
+| `status`     | `string` | ✅       | `working`                                 | `no_streams` | `embed` | `error` |
+| `streams`    | `Array`  | ✅       | `[{ url, type, quality, resolution }]`    |
+| `latency_ms` | `number` | ✅       | `Date.now() - start`                      |
+| `subtitles`  | `Array`  | ❌       | `[{ url, lang, type }]`                   |
+| `error`      | `string` | ❌       | Error message if status is `error`        |
+| `title`      | `string` | ❌       | Movie/show title if known                 |
 
-```js
-{
-  (tmdbId, type, season, episode);
-}
-```
+---
 
-Must return:
+## 🌐 Output Formats
 
-```js
-{
-  source: 'mysource.com',     // display name
-  status: 'working' | 'no_streams' | 'embed' | 'error',
-  streams: [{ url, type, quality, resolution }],
-  latency_ms: Number,
-}
-```
+| Format           | Use Case                                                              | Example                |
+| ---------------- | --------------------------------------------------------------------- | ---------------------- |
+| `full` (default) | Detailed JSON with all metadata                                       | Standard consumption   |
+| `compact`        | Simplified stream array                                               | Lightweight clients    |
+| `cloudstream`    | [CloudStream 3](https://cloudstream.miraheze.org/) extension format   | Android streaming apps |
+| `skystream`      | [SkyStream](https://github.com/akashdh11/skystream) plugin format     | Cross-platform apps    |
+| `nuvio`          | [Nuvio](https://github.com/yoruix/nuvio-providers) provider format    | Nuvio streaming app    |
+| `stremio`        | [Stremio](https://stremio.github.io/stremio-addon-sdk/) add-on format | Stremio add-ons        |
 
-Optional: `embedUrl`, `subtitles`, `error`, `title`.
+---
 
-### Testing a Single Source
+## 🔧 Environment Variables
+
+| Variable        | Purpose                                    | Default                 |
+| --------------- | ------------------------------------------ | ----------------------- |
+| `GITHUB_USER`   | GitHub username for remote source loading  | (required in pipe mode) |
+| `GITHUB_REPO`   | GitHub repo name for remote source loading | (required in pipe mode) |
+| `GITHUB_BRANCH` | Branch for remote source loading           | `master`                |
+| `TMDB_API_KEY`  | TMDB API key                               | Public demo key         |
+| `PORT`          | HTTP server port                           | `3000`                  |
+
+---
+
+## 🏗️ How It Works
+
+1. **`raw-api.js`** is a generic engine with zero hardcoded sources
+2. When run **locally**, it auto-discovers all `.js` files in `sources/`
+3. When **piped**, it fetches sources dynamically from your GitHub repo
+4. All sources run in **parallel** with a 30-second timeout
+5. Results are **deduplicated**, **sorted** by status (working → embed → error)
+6. Output is **formatted** for your target platform
+
+---
+
+## 📊 Health Check
 
 ```bash
-node sources/vaplayer.js --tmdb=24428
+# Run health check (quick)
+node scripts/source-health.js --quick
+
+# Full health check
+node scripts/source-health.js
+
+# Generate JSON report
+node scripts/source-health.js --output=json
+
+# Update SOURCE_HEALTH.md
+node scripts/source-health.js --update-readme
 ```
 
-## Health Check
+---
 
-The GitHub Actions workflow tests all sources and updates `SOURCE_HEALTH.md`.
-
-**Fork notice:** Scheduled workflows are disabled on forks. Use manual trigger or external cron:
+## 🧪 Testing
 
 ```bash
-export GITHUB_TOKEN=ghp_your_token
-./scripts/trigger-health-check.sh
+# Full test suite
+node test.js
+
+# Quick smoke test
+node test.js --quick
+
+# Test specific source
+node test.js --source=vaplayer
+
+# Test format adapters only
+node test.js --format
 ```
 
-## Project Structure
+---
 
-```
-├── sources/              # ← ONLY FOLDER YOU EDIT
-│   ├── index.js          #   auto-discovery engine
-│   ├── _template.js      #   copy this to add a source
-│   ├── vaplayer.js       #   each source = one file
-│   ├── cine_su.js
-│   └── ...
-├── utils/                # shared helpers (don't edit unless adding a new helper)
-│   ├── fetcher.js
-│   ├── embedScraper.js
-│   └── tmdb-lookup.js
-├── api.js                # CLI (don't edit)
-├── server.js             # HTTP API (don't edit)
-├── test.js               # test suite (don't edit)
-└── scripts/
-    └── source-health.js  # health check (don't edit)
-```
+## 📄 License
+
+MIT

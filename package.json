@@ -1,15 +1,49 @@
 {
 	"name": "multisource-api",
-	"version": "3.0.0",
-	"description": "Aggregate HLS video streams from multiple sources",
-	"main": "api.js",
+	"version": "4.0.0",
+	"description": "Zero-dependency serverless API to aggregate HLS video streams from multiple sources for any TMDB movie or TV show",
+	"main": "raw-api.js",
 	"scripts": {
-		"start": "node server.js",
+		"start": "node raw-api.js --server",
 		"test": "node test.js",
-		"raw": "node raw-api.js"
+		"cli": "node raw-api.js --tmdb=24428",
+		"health": "node scripts/source-health.js"
 	},
-	"dependencies": {
-		"axios": "^1.7.0",
-		"express": "^5.2.1"
-	}
+	"keywords": [
+		"streaming",
+		"hls",
+		"m3u8",
+		"tmdb",
+		"aggregator",
+		"serverless",
+		"video",
+		"cloudstream",
+		"skystream",
+		"nuvio",
+		"stremio"
+	],
+	"author": "thegnsme",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/thegnsme/multisource-api.git"
+	},
+	"bugs": {
+		"url": "https://github.com/thegnsme/multisource-api/issues"
+	},
+	"homepage": "https://github.com/thegnsme/multisource-api#readme",
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"optionalDependencies": {
+		"axios": "^1.7.0"
+	},
+	"files": [
+		"raw-api.js",
+		"sources/",
+		"scripts/",
+		"test.js",
+		"SOURCE_HEALTH.md",
+		"README.md"
+	]
 }
